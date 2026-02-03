@@ -2,6 +2,10 @@
 
 A CRM application for managing venues, operators, concessionaires, and contacts in the live entertainment industry.
 
+## Important Guidelines
+
+- **Always ask before installing new libraries or making significant dependency changes.** Prefer using existing libraries and tools already in the project whenever possible.
+
 ## Tech Stack
 
 - **Framework:** Vite 5 + React 18 + TypeScript
