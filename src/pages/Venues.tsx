@@ -30,7 +30,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Bell, Search, MoreHorizontal, MapPin, Users, Building2, ChefHat, ExternalLink, ChevronRight, ChevronDown, List } from "lucide-react"
+import { Bell, Search, MoreHorizontal, MapPin, Users, Building2, ChefHat, ExternalLink, ChevronRight, ChevronDown, List, Landmark, TreePine, Drama, Building, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   venues,
@@ -74,6 +74,16 @@ const typeLabels: Record<VenueType, string> = {
   other: "Other",
 }
 
+// Venue type icons and colors
+const venueTypeConfig: Record<VenueType, { icon: typeof Building2; color: string; bgColor: string }> = {
+  stadium: { icon: Landmark, color: "text-primary", bgColor: "bg-primary/10" },
+  arena: { icon: Building2, color: "text-chart-2", bgColor: "bg-chart-2/10" },
+  amphitheater: { icon: TreePine, color: "text-success", bgColor: "bg-success/10" },
+  theater: { icon: Drama, color: "text-chart-4", bgColor: "bg-chart-4/10" },
+  "convention-center": { icon: Building, color: "text-chart-3", bgColor: "bg-chart-3/10" },
+  other: { icon: Star, color: "text-muted-foreground", bgColor: "bg-muted" },
+}
+
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -91,13 +101,17 @@ function formatCapacity(capacity?: number) {
 function VenueRow({ venue }: { venue: Venue }) {
   const status = statusConfig[venue.status]
   const stage = stageConfig[venue.stage]
+  const typeConfig = venueTypeConfig[venue.type]
+  const TypeIcon = typeConfig.icon
 
   return (
     <Link
       to={`/venues/${venue.id}`}
       className="flex items-center gap-4 py-2.5 px-4 hover:bg-secondary/50 rounded-md transition-colors group"
     >
-      <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+      <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", typeConfig.bgColor)}>
+        <TypeIcon className={cn("h-4 w-4", typeConfig.color)} />
+      </div>
       <div className="flex-1 min-w-0">
         <p className="font-medium text-sm text-card-foreground group-hover:text-primary truncate">
           {venue.name}
@@ -408,31 +422,39 @@ export default function Venues() {
                     const venueConcessionaires = venue.concessionaireIds.map(id => getConcessionaireById(id)).filter(Boolean)
                     const stage = stageConfig[venue.stage]
                     const status = statusConfig[venue.status]
+                    const typeConfig = venueTypeConfig[venue.type]
+                    const TypeIcon = typeConfig.icon
 
                     return (
                       <TableRow key={venue.id} className="group">
                         <TableCell>
-                          <Link to={`/venues/${venue.id}`} className="block group/link">
-                            <p className="font-medium text-card-foreground group-hover/link:text-primary transition-colors">
-                              {venue.name}
-                            </p>
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <MapPin className="h-3 w-3" />
-                              {venue.city}, {venue.state}
-                              {venue.capacity && (
-                                <>
-                                  <span className="mx-1">·</span>
-                                  <Users className="h-3 w-3" />
-                                  {formatCapacity(venue.capacity)}
-                                </>
-                              )}
+                          <Link to={`/venues/${venue.id}`} className="flex items-center gap-3 group/link">
+                            <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center shrink-0", typeConfig.bgColor)}>
+                              <TypeIcon className={cn("h-5 w-5", typeConfig.color)} />
+                            </div>
+                            <div>
+                              <p className="font-medium text-card-foreground group-hover/link:text-primary transition-colors">
+                                {venue.name}
+                              </p>
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <MapPin className="h-3 w-3" />
+                                {venue.city}, {venue.state}
+                                {venue.capacity && (
+                                  <>
+                                    <span className="mx-1">·</span>
+                                    <Users className="h-3 w-3" />
+                                    {formatCapacity(venue.capacity)}
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </Link>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className="text-xs">
-                            {typeLabels[venue.type]}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <TypeIcon className={cn("h-4 w-4", typeConfig.color)} />
+                            <span className="text-sm">{typeLabels[venue.type]}</span>
+                          </div>
                         </TableCell>
                         <TableCell>
                           {operator && (

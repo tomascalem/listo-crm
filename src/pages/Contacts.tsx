@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/crm/sidebar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 import {
   Table,
   TableBody,
@@ -13,7 +14,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Bell, Search, Mail, Phone } from "lucide-react"
-import { contacts, getVenueById, getOperatorById } from "@/lib/mock-data"
+import { contacts, getVenueById, interactions } from "@/lib/mock-data"
+
+// Get last interaction for a contact
+function getLastInteraction(contactId: string) {
+  return interactions
+    .filter(i => i.contactId === contactId)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+}
 
 export default function Contacts() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -49,16 +57,14 @@ export default function Contacts() {
         </header>
 
         <div className="p-6 space-y-6">
-          <div className="flex gap-3 items-center">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search contacts..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search contacts..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
           </div>
 
           <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -68,6 +74,7 @@ export default function Contacts() {
                   <TableHead>Name</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Venues</TableHead>
+                  <TableHead>Last Interaction</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
@@ -75,13 +82,16 @@ export default function Contacts() {
               <TableBody>
                 {filteredContacts.map((contact) => {
                   const contactVenues = contact.venueIds.map(vid => getVenueById(vid)).filter(Boolean)
+                  const lastInteraction = getLastInteraction(contact.id)
 
                   return (
                     <TableRow key={contact.id}>
                       <TableCell>
                         <Link to={`/contacts/${contact.id}`} className="flex items-center gap-3 hover:text-primary">
-                          <Avatar>
-                            <AvatarFallback>{contact.avatar || contact.name.slice(0, 2)}</AvatarFallback>
+                          <Avatar className="border border-primary/20">
+                            <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                              {contact.avatar || contact.name.split(' ').map(n => n[0]).join('')}
+                            </AvatarFallback>
                           </Avatar>
                           <div>
                             <p className="font-medium">{contact.name}</p>
@@ -89,28 +99,51 @@ export default function Contacts() {
                           </div>
                         </Link>
                       </TableCell>
-                      <TableCell>{contact.role}</TableCell>
+                      <TableCell>
+                        <span className="text-sm">{contact.role}</span>
+                        {contact.isPrimary && (
+                          <Badge variant="secondary" className="ml-2 bg-success/20 text-success text-xs">
+                            Primary
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {contactVenues.slice(0, 2).map((venue) => venue && (
-                            <Link key={venue.id} to={`/venues/${venue.id}`} className="text-sm text-primary hover:underline">
-                              {venue.name}
+                            <Link key={venue.id} to={`/venues/${venue.id}`}>
+                              <Badge variant="outline" className="text-xs hover:bg-primary/10 hover:text-primary transition-colors">
+                                {venue.name}
+                              </Badge>
                             </Link>
                           ))}
                           {contactVenues.length > 2 && (
-                            <span className="text-sm text-muted-foreground">+{contactVenues.length - 2} more</span>
+                            <Badge variant="outline" className="text-xs">
+                              +{contactVenues.length - 2}
+                            </Badge>
                           )}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
+                        {lastInteraction ? (
+                          <div>
+                            <Badge variant="outline" className="text-xs capitalize">{lastInteraction.type}</Badge>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {new Date(lastInteraction.date).toLocaleDateString()}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
                           <a href={`mailto:${contact.email}`}>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="icon-sm">
                               <Mail className="h-4 w-4" />
                             </Button>
                           </a>
                           <a href={`tel:${contact.phone}`}>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="icon-sm">
                               <Phone className="h-4 w-4" />
                             </Button>
                           </a>
@@ -127,6 +160,12 @@ export default function Contacts() {
               </TableBody>
             </Table>
           </div>
+
+          {filteredContacts.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground">
+              No contacts found matching your search
+            </div>
+          )}
         </div>
       </main>
     </div>
