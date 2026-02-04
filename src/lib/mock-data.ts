@@ -2,6 +2,39 @@ export type VenueStatus = "client" | "prospect" | "churned" | "negotiating"
 export type VenueStage = "lead" | "qualified" | "demo" | "proposal" | "negotiation" | "closed-won" | "closed-lost"
 export type InteractionType = "call" | "video" | "email" | "meeting" | "note"
 export type VenueType = "stadium" | "arena" | "amphitheater" | "theater" | "convention-center" | "other"
+export type FileType = "deck" | "one-pager" | "proposal" | "report" | "other"
+export type ContractType = "msa" | "sow" | "nda" | "other"
+export type ContractStatus = "active" | "expired" | "pending" | "terminated"
+
+// Files - decks, one-pagers, proposals, reports
+export interface VenueFile {
+  id: string
+  name: string
+  type: FileType
+  date: string // When the file was created/uploaded
+  url?: string // External link (Google Drive, Dropbox, etc.)
+  description?: string
+  entityType: "venue" | "operator" | "concessionaire"
+  entityId: string
+  isInheritable?: boolean // If true, venues under this entity will see this file
+  createdAt: string
+}
+
+// Contracts - MSAs, SOWs, NDAs
+export interface Contract {
+  id: string
+  name: string
+  type: ContractType
+  effectiveDate: string
+  expirationDate?: string
+  status: ContractStatus
+  url?: string
+  description?: string
+  entityType: "venue" | "operator" | "concessionaire"
+  entityId: string
+  isInheritable?: boolean
+  createdAt: string
+}
 
 // Operators run/own venues (e.g., Live Nation, MSG, AEG, Oak View Group)
 export interface Operator {
@@ -803,12 +836,19 @@ Account Executive | List`,
   },
 ]
 
+// Dynamic due dates for todos
+const todayDate = new Date()
+const formatTodoDate = (daysFromNow: number) => {
+  const d = new Date(todayDate.getTime() + daysFromNow * 24 * 60 * 60 * 1000)
+  return d.toISOString().split("T")[0]
+}
+
 export const todos: Todo[] = [
   {
     id: "todo-1",
     title: "Send Beacon Theatre proposal",
     description: "Updated pricing proposal with multi-venue discount",
-    dueDate: "2025-01-30",
+    dueDate: formatTodoDate(-2), // 2 days overdue
     completed: false,
     priority: "high",
     assignedTo: "user-1",
@@ -819,7 +859,7 @@ export const todos: Todo[] = [
     id: "todo-2",
     title: "Schedule Red Rocks demo",
     description: "Confirm stakeholder availability for Feb 15th demo",
-    dueDate: "2025-02-01",
+    dueDate: formatTodoDate(1),
     completed: false,
     priority: "high",
     assignedTo: "user-2",
@@ -830,7 +870,7 @@ export const todos: Todo[] = [
     id: "todo-3",
     title: "Prepare Ball Arena pricing proposal",
     description: "Creative pricing structure to address budget concerns",
-    dueDate: "2025-01-31",
+    dueDate: formatTodoDate(0), // Due today
     completed: false,
     priority: "high",
     assignedTo: "user-1",
@@ -841,7 +881,7 @@ export const todos: Todo[] = [
     id: "todo-4",
     title: "Technical architecture document for AEG",
     description: "Address IT team concerns about legacy system integration",
-    dueDate: "2025-02-05",
+    dueDate: formatTodoDate(3),
     completed: false,
     priority: "medium",
     assignedTo: "user-3",
@@ -852,7 +892,7 @@ export const todos: Todo[] = [
     id: "todo-5",
     title: "Initial outreach to Climate Pledge Arena",
     description: "Schedule introductory call with Jennifer Adams",
-    dueDate: "2025-02-10",
+    dueDate: formatTodoDate(7),
     completed: false,
     priority: "low",
     assignedTo: "user-2",
@@ -863,7 +903,7 @@ export const todos: Todo[] = [
     id: "todo-6",
     title: "Follow up on Amanda's leadership presentation",
     description: "Check if leadership approved moving forward",
-    dueDate: "2025-01-29",
+    dueDate: formatTodoDate(-1), // 1 day overdue
     completed: false,
     priority: "medium",
     assignedTo: "user-1",
@@ -873,12 +913,403 @@ export const todos: Todo[] = [
   {
     id: "todo-7",
     title: "MSG quarterly report preparation",
-    dueDate: "2025-02-15",
+    dueDate: formatTodoDate(12),
     completed: false,
     priority: "medium",
     assignedTo: "user-1",
     venueId: "ven-1",
     contactId: "con-1",
+  },
+  {
+    id: "todo-8",
+    title: "Call SoFi Stadium VP back",
+    description: "Respond to inbound inquiry within 24 hours",
+    dueDate: formatTodoDate(0), // Due today
+    completed: false,
+    priority: "high",
+    assignedTo: "user-1",
+    venueId: "ven-10",
+    contactId: "con-5",
+  },
+  {
+    id: "todo-9",
+    title: "Review Barclays Center contract terms",
+    description: "Legal team needs feedback on proposed terms",
+    dueDate: formatTodoDate(2),
+    completed: false,
+    priority: "medium",
+    assignedTo: "user-1",
+    venueId: "ven-12",
+    contactId: "con-8",
+  },
+  {
+    id: "todo-10",
+    title: "Update CRM with T-Mobile Arena notes",
+    description: "Add meeting notes and next steps from site walk",
+    dueDate: formatTodoDate(1),
+    completed: false,
+    priority: "low",
+    assignedTo: "user-2",
+    venueId: "ven-11",
+    contactId: "con-6",
+  },
+  {
+    id: "todo-11",
+    title: "Send MSG success metrics to marketing",
+    description: "23% throughput increase data for case study",
+    dueDate: formatTodoDate(5),
+    completed: false,
+    priority: "medium",
+    assignedTo: "user-1",
+    venueId: "ven-1",
+    contactId: "con-1",
+  },
+  {
+    id: "todo-12",
+    title: "Prep demo environment for Red Rocks",
+    description: "Configure outdoor venue settings and offline mode",
+    dueDate: formatTodoDate(10),
+    completed: false,
+    priority: "medium",
+    assignedTo: "user-3",
+    venueId: "ven-6",
+    contactId: "con-4",
+  },
+]
+
+// Files - documents associated with venues, operators, and concessionaires
+export const files: VenueFile[] = [
+  // Operator files (inheritable to venues)
+  {
+    id: "file-1",
+    name: "Live Nation Corporate Overview 2024",
+    type: "deck",
+    date: "2024-01-15",
+    url: "https://drive.google.com/file/d/live-nation-overview",
+    description: "Corporate overview deck for all Live Nation partnerships",
+    entityType: "operator",
+    entityId: "op-1",
+    isInheritable: true,
+    createdAt: "2024-01-15",
+  },
+  {
+    id: "file-2",
+    name: "Live Nation Partnership Guidelines",
+    type: "one-pager",
+    date: "2024-03-01",
+    url: "https://drive.google.com/file/d/ln-guidelines",
+    description: "Standard partnership guidelines and requirements",
+    entityType: "operator",
+    entityId: "op-1",
+    isInheritable: true,
+    createdAt: "2024-03-01",
+  },
+  {
+    id: "file-3",
+    name: "MSG Entertainment Brand Standards",
+    type: "deck",
+    date: "2024-02-20",
+    url: "https://drive.google.com/file/d/msg-brand",
+    description: "Brand guidelines for MSG properties",
+    entityType: "operator",
+    entityId: "op-2",
+    isInheritable: true,
+    createdAt: "2024-02-20",
+  },
+  {
+    id: "file-4",
+    name: "Oak View Group Venue Standards",
+    type: "report",
+    date: "2024-06-10",
+    url: "https://drive.google.com/file/d/ovg-standards",
+    description: "Operational standards for OVG managed venues",
+    entityType: "operator",
+    entityId: "op-4",
+    isInheritable: true,
+    createdAt: "2024-06-10",
+  },
+  // Concessionaire files (inheritable to venues)
+  {
+    id: "file-5",
+    name: "Levy Menu Standards 2024",
+    type: "deck",
+    date: "2024-04-01",
+    url: "https://drive.google.com/file/d/levy-menu",
+    description: "Standard menu offerings and pricing guidelines",
+    entityType: "concessionaire",
+    entityId: "con-1",
+    isInheritable: true,
+    createdAt: "2024-04-01",
+  },
+  {
+    id: "file-6",
+    name: "Levy Hospitality Training Guide",
+    type: "other",
+    date: "2024-05-15",
+    url: "https://drive.google.com/file/d/levy-training",
+    description: "Staff training materials",
+    entityType: "concessionaire",
+    entityId: "con-1",
+    isInheritable: true,
+    createdAt: "2024-05-15",
+  },
+  {
+    id: "file-7",
+    name: "Aramark Food Safety Standards",
+    type: "report",
+    date: "2024-03-20",
+    url: "https://drive.google.com/file/d/aramark-safety",
+    description: "Food safety and hygiene requirements",
+    entityType: "concessionaire",
+    entityId: "con-2",
+    isInheritable: true,
+    createdAt: "2024-03-20",
+  },
+  {
+    id: "file-8",
+    name: "Legends VIP Experience Guide",
+    type: "deck",
+    date: "2024-07-01",
+    url: "https://drive.google.com/file/d/legends-vip",
+    description: "Premium hospitality service standards",
+    entityType: "concessionaire",
+    entityId: "con-5",
+    isInheritable: true,
+    createdAt: "2024-07-01",
+  },
+  // Venue-specific files
+  {
+    id: "file-9",
+    name: "MSG Q4 2024 Sales Deck",
+    type: "deck",
+    date: "2024-12-15",
+    url: "https://drive.google.com/file/d/msg-q4-deck",
+    description: "Q4 sales presentation for Madison Square Garden",
+    entityType: "venue",
+    entityId: "ven-1",
+    createdAt: "2024-12-15",
+  },
+  {
+    id: "file-10",
+    name: "MSG Venue One-Pager",
+    type: "one-pager",
+    date: "2024-11-20",
+    url: "https://drive.google.com/file/d/msg-one-pager",
+    description: "Overview document for MSG partnership",
+    entityType: "venue",
+    entityId: "ven-1",
+    createdAt: "2024-11-20",
+  },
+  {
+    id: "file-11",
+    name: "The Forum Partnership Proposal",
+    type: "proposal",
+    date: "2024-01-05",
+    url: "https://drive.google.com/file/d/forum-proposal",
+    description: "Initial partnership proposal",
+    entityType: "venue",
+    entityId: "ven-4",
+    createdAt: "2024-01-05",
+  },
+  {
+    id: "file-12",
+    name: "Hollywood Bowl Seasonal Analysis",
+    type: "report",
+    date: "2024-09-30",
+    url: "https://drive.google.com/file/d/hb-analysis",
+    description: "Seasonal performance analysis",
+    entityType: "venue",
+    entityId: "ven-5",
+    createdAt: "2024-09-30",
+  },
+  {
+    id: "file-13",
+    name: "Ball Arena Proposal Draft",
+    type: "proposal",
+    date: "2025-01-20",
+    url: "https://drive.google.com/file/d/ball-arena-proposal",
+    description: "Draft proposal for Ball Arena partnership",
+    entityType: "venue",
+    entityId: "ven-8",
+    createdAt: "2025-01-20",
+  },
+  {
+    id: "file-14",
+    name: "Red Rocks Demo Presentation",
+    type: "deck",
+    date: "2025-01-25",
+    url: "https://drive.google.com/file/d/redrocks-demo",
+    description: "Demo presentation for upcoming meeting",
+    entityType: "venue",
+    entityId: "ven-6",
+    createdAt: "2025-01-25",
+  },
+]
+
+// Contracts - legal agreements with venues, operators, and concessionaires
+export const contracts: Contract[] = [
+  // Operator contracts (inheritable to venues)
+  {
+    id: "contract-1",
+    name: "Live Nation Master Service Agreement",
+    type: "msa",
+    effectiveDate: "2024-01-01",
+    expirationDate: "2026-12-31",
+    status: "active",
+    url: "https://drive.google.com/file/d/ln-msa",
+    description: "Master agreement covering all Live Nation venues",
+    entityType: "operator",
+    entityId: "op-1",
+    isInheritable: true,
+    createdAt: "2024-01-01",
+  },
+  {
+    id: "contract-2",
+    name: "MSG Entertainment MSA",
+    type: "msa",
+    effectiveDate: "2024-03-15",
+    expirationDate: "2027-03-14",
+    status: "active",
+    url: "https://drive.google.com/file/d/msg-msa",
+    description: "Master service agreement with MSG Entertainment",
+    entityType: "operator",
+    entityId: "op-2",
+    isInheritable: true,
+    createdAt: "2024-03-15",
+  },
+  {
+    id: "contract-3",
+    name: "Oak View Group NDA",
+    type: "nda",
+    effectiveDate: "2025-01-05",
+    status: "active",
+    url: "https://drive.google.com/file/d/ovg-nda",
+    description: "Non-disclosure agreement for partnership discussions",
+    entityType: "operator",
+    entityId: "op-4",
+    isInheritable: false,
+    createdAt: "2025-01-05",
+  },
+  // Concessionaire contracts (inheritable to venues)
+  {
+    id: "contract-4",
+    name: "Levy Restaurants Partnership Agreement",
+    type: "msa",
+    effectiveDate: "2024-02-01",
+    expirationDate: "2027-01-31",
+    status: "active",
+    url: "https://drive.google.com/file/d/levy-msa",
+    description: "Master partnership agreement with Levy",
+    entityType: "concessionaire",
+    entityId: "con-1",
+    isInheritable: true,
+    createdAt: "2024-02-01",
+  },
+  {
+    id: "contract-5",
+    name: "Aramark Venue Services Agreement",
+    type: "msa",
+    effectiveDate: "2024-06-01",
+    expirationDate: "2026-05-31",
+    status: "active",
+    url: "https://drive.google.com/file/d/aramark-msa",
+    description: "Service agreement for Aramark managed concessions",
+    entityType: "concessionaire",
+    entityId: "con-2",
+    isInheritable: true,
+    createdAt: "2024-06-01",
+  },
+  {
+    id: "contract-6",
+    name: "Legends Hospitality MSA",
+    type: "msa",
+    effectiveDate: "2024-04-01",
+    expirationDate: "2027-03-31",
+    status: "active",
+    url: "https://drive.google.com/file/d/legends-msa",
+    description: "Master service agreement for premium hospitality",
+    entityType: "concessionaire",
+    entityId: "con-5",
+    isInheritable: true,
+    createdAt: "2024-04-01",
+  },
+  // Venue-specific contracts
+  {
+    id: "contract-7",
+    name: "Madison Square Garden SOW",
+    type: "sow",
+    effectiveDate: "2024-03-20",
+    expirationDate: "2025-03-19",
+    status: "active",
+    url: "https://drive.google.com/file/d/msg-sow",
+    description: "Statement of work for MSG implementation",
+    entityType: "venue",
+    entityId: "ven-1",
+    createdAt: "2024-03-20",
+  },
+  {
+    id: "contract-8",
+    name: "Radio City Music Hall SOW",
+    type: "sow",
+    effectiveDate: "2024-04-01",
+    expirationDate: "2025-03-31",
+    status: "active",
+    url: "https://drive.google.com/file/d/rcmh-sow",
+    description: "Implementation scope for Radio City",
+    entityType: "venue",
+    entityId: "ven-2",
+    createdAt: "2024-04-01",
+  },
+  {
+    id: "contract-9",
+    name: "The Forum Implementation Agreement",
+    type: "sow",
+    effectiveDate: "2024-01-15",
+    expirationDate: "2025-01-14",
+    status: "active",
+    url: "https://drive.google.com/file/d/forum-sow",
+    description: "SOW for The Forum rollout",
+    entityType: "venue",
+    entityId: "ven-4",
+    createdAt: "2024-01-15",
+  },
+  {
+    id: "contract-10",
+    name: "Hollywood Bowl Seasonal Contract",
+    type: "sow",
+    effectiveDate: "2024-05-01",
+    expirationDate: "2024-10-31",
+    status: "expired",
+    url: "https://drive.google.com/file/d/hb-seasonal",
+    description: "2024 season implementation",
+    entityType: "venue",
+    entityId: "ven-5",
+    createdAt: "2024-05-01",
+  },
+  {
+    id: "contract-11",
+    name: "Hollywood Bowl 2025 Season",
+    type: "sow",
+    effectiveDate: "2025-05-01",
+    expirationDate: "2025-10-31",
+    status: "pending",
+    url: "https://drive.google.com/file/d/hb-2025",
+    description: "2025 season contract",
+    entityType: "venue",
+    entityId: "ven-5",
+    createdAt: "2025-01-10",
+  },
+  {
+    id: "contract-12",
+    name: "Ball Arena NDA",
+    type: "nda",
+    effectiveDate: "2024-08-05",
+    status: "active",
+    url: "https://drive.google.com/file/d/ball-nda",
+    description: "NDA for partnership discussions",
+    entityType: "venue",
+    entityId: "ven-8",
+    createdAt: "2024-08-05",
   },
 ]
 
@@ -995,4 +1426,515 @@ export function getUserById(id: string) {
 
 export function getContactById(id: string) {
   return contacts.find((c) => c.id === id)
+}
+
+// File helper functions
+export function getFilesByEntityId(entityType: "venue" | "operator" | "concessionaire", entityId: string) {
+  return files
+    .filter((f) => f.entityType === entityType && f.entityId === entityId)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+}
+
+export function getFilesForVenue(venueId: string) {
+  const venue = getVenueById(venueId)
+  if (!venue) return { venueFiles: [], inheritedFromOperator: [], inheritedFromConcessionaire: [] }
+
+  // Get venue-specific files
+  const venueFiles = files
+    .filter((f) => f.entityType === "venue" && f.entityId === venueId)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  // Get inherited files from operator
+  const inheritedFromOperator = files
+    .filter((f) => f.entityType === "operator" && f.entityId === venue.operatorId && f.isInheritable)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  // Get inherited files from concessionaires
+  const inheritedFromConcessionaire = files
+    .filter((f) => f.entityType === "concessionaire" && venue.concessionaireIds.includes(f.entityId) && f.isInheritable)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  return { venueFiles, inheritedFromOperator, inheritedFromConcessionaire }
+}
+
+// Contract helper functions
+export function getContractsByEntityId(entityType: "venue" | "operator" | "concessionaire", entityId: string) {
+  return contracts
+    .filter((c) => c.entityType === entityType && c.entityId === entityId)
+    .sort((a, b) => new Date(b.effectiveDate).getTime() - new Date(a.effectiveDate).getTime())
+}
+
+export function getContractsForVenue(venueId: string) {
+  const venue = getVenueById(venueId)
+  if (!venue) return { venueContracts: [], inheritedFromOperator: [], inheritedFromConcessionaire: [] }
+
+  // Get venue-specific contracts
+  const venueContracts = contracts
+    .filter((c) => c.entityType === "venue" && c.entityId === venueId)
+    .sort((a, b) => new Date(b.effectiveDate).getTime() - new Date(a.effectiveDate).getTime())
+
+  // Get inherited contracts from operator
+  const inheritedFromOperator = contracts
+    .filter((c) => c.entityType === "operator" && c.entityId === venue.operatorId && c.isInheritable)
+    .sort((a, b) => new Date(b.effectiveDate).getTime() - new Date(a.effectiveDate).getTime())
+
+  // Get inherited contracts from concessionaires
+  const inheritedFromConcessionaire = contracts
+    .filter((c) => c.entityType === "concessionaire" && venue.concessionaireIds.includes(c.entityId) && c.isInheritable)
+    .sort((a, b) => new Date(b.effectiveDate).getTime() - new Date(a.effectiveDate).getTime())
+
+  return { venueContracts, inheritedFromOperator, inheritedFromConcessionaire }
+}
+
+// ============================================
+// Dashboard Types and Data
+// ============================================
+
+// Scheduled events - calls, meetings on calendar
+export interface ScheduledEvent {
+  id: string
+  type: "call" | "video" | "meeting"
+  title: string
+  startTime: string // ISO datetime
+  endTime?: string
+  venueId: string
+  contactId: string
+  userId: string
+  meetingLink?: string // For video calls
+  location?: string // For in-person meetings
+  notes?: string
+}
+
+// AI-recommended actions
+export type RecommendedActionType = "follow-up-email" | "schedule-call" | "send-proposal" | "check-in"
+
+export interface RecommendedAction {
+  id: string
+  type: RecommendedActionType
+  priority: "high" | "medium" | "low"
+  title: string
+  reason: string // Why AI suggests this
+  suggestedContent?: string // Pre-written email/message
+  venueId: string
+  contactId: string
+  userId: string
+  dueBy?: string
+}
+
+// Business insights/news
+export type InsightType = "contract-news" | "engagement-metric" | "pipeline-alert" | "milestone" | "inbound-activity"
+export type InsightPriority = "info" | "positive" | "warning" | "urgent"
+
+export interface BusinessInsight {
+  id: string
+  type: InsightType
+  title: string
+  description: string
+  timestamp: string
+  venueId?: string
+  operatorId?: string
+  metric?: { value: number; change: number; unit: string }
+  priority: InsightPriority
+}
+
+// Scheduled events for today - using dynamic date for demo purposes
+const today = new Date().toISOString().split("T")[0]
+
+export const scheduledEvents: ScheduledEvent[] = [
+  {
+    id: "evt-1",
+    type: "video",
+    title: "Ball Arena Contract Review",
+    startTime: `${today}T10:00:00Z`,
+    endTime: `${today}T10:30:00Z`,
+    venueId: "ven-8",
+    contactId: "con-7",
+    userId: "user-1",
+    meetingLink: "https://meet.google.com/abc-defg-hij",
+    notes: "Review final pricing structure",
+  },
+  {
+    id: "evt-2",
+    type: "call",
+    title: "Follow-up: Beacon Theatre Proposal",
+    startTime: `${today}T14:00:00Z`,
+    endTime: `${today}T14:30:00Z`,
+    venueId: "ven-3",
+    contactId: "con-1",
+    userId: "user-1",
+  },
+  {
+    id: "evt-3",
+    type: "meeting",
+    title: "Red Rocks Site Visit Planning",
+    startTime: `${today}T16:00:00Z`,
+    venueId: "ven-6",
+    contactId: "con-4",
+    userId: "user-2",
+    location: "Live Nation HQ, Denver",
+  },
+  {
+    id: "evt-4",
+    type: "video",
+    title: "AEG Technical Review",
+    startTime: `${today}T11:30:00Z`,
+    endTime: `${today}T12:00:00Z`,
+    venueId: "ven-7",
+    contactId: "con-6",
+    userId: "user-3",
+    meetingLink: "https://zoom.us/j/123456789",
+    notes: "Discuss legacy system integration",
+  },
+  {
+    id: "evt-5",
+    type: "video",
+    title: "MSG Quarterly Strategy Call",
+    startTime: `${today}T09:00:00Z`,
+    endTime: `${today}T09:45:00Z`,
+    venueId: "ven-1",
+    contactId: "con-1",
+    userId: "user-1",
+    meetingLink: "https://teams.microsoft.com/l/meetup-join/abc123",
+    notes: "Q1 planning and roadmap review",
+  },
+  {
+    id: "evt-6",
+    type: "call",
+    title: "Barclays Center Follow-up",
+    startTime: `${today}T15:30:00Z`,
+    endTime: `${today}T16:00:00Z`,
+    venueId: "ven-12",
+    contactId: "con-8",
+    userId: "user-1",
+  },
+  {
+    id: "evt-7",
+    type: "meeting",
+    title: "T-Mobile Arena Site Walk",
+    startTime: `${today}T13:00:00Z`,
+    endTime: `${today}T14:30:00Z`,
+    venueId: "ven-11",
+    contactId: "con-6",
+    userId: "user-2",
+    location: "T-Mobile Arena, Las Vegas",
+  },
+  {
+    id: "evt-8",
+    type: "video",
+    title: "Climate Pledge Intro Call",
+    startTime: `${today}T11:00:00Z`,
+    endTime: `${today}T11:30:00Z`,
+    venueId: "ven-9",
+    contactId: "con-8",
+    userId: "user-2",
+    meetingLink: "https://zoom.us/j/987654321",
+    notes: "Initial discovery call with OVG team",
+  },
+]
+
+// AI-recommended actions
+export const recommendedActions: RecommendedAction[] = [
+  {
+    id: "rec-1",
+    type: "follow-up-email",
+    priority: "high",
+    title: "Follow up with Michael Brown on pricing",
+    reason:
+      "Ball Arena negotiation call was 7 days ago. They mentioned competitor pricing was 15% lower - time to present revised proposal.",
+    suggestedContent: `Hi Michael,
+
+Thank you for our productive call last week. I've been working with our team on a flexible pricing structure that addresses your budget considerations while maintaining the full platform capabilities you valued.
+
+I'd love to walk you through our revised proposal. Would you have 30 minutes this week?
+
+Best regards`,
+    venueId: "ven-8",
+    contactId: "con-7",
+    userId: "user-1",
+    dueBy: "2025-02-03",
+  },
+  {
+    id: "rec-2",
+    type: "check-in",
+    priority: "medium",
+    title: "Check in with Lisa Chen on technical review",
+    reason:
+      "Crypto.com Arena site visit was 9 days ago. IT team needed architecture review - follow up on their evaluation.",
+    suggestedContent: `Hi Lisa,
+
+I wanted to follow up on the technical architecture review we discussed during my visit. Has your IT team had a chance to review the integration documentation I sent over?
+
+I'm happy to schedule a call with our technical team to address any questions.
+
+Best regards`,
+    venueId: "ven-7",
+    contactId: "con-6",
+    userId: "user-3",
+    dueBy: "2025-02-05",
+  },
+  {
+    id: "rec-3",
+    type: "schedule-call",
+    priority: "high",
+    title: "Schedule demo confirmation with Amanda Torres",
+    reason: "Red Rocks demo is scheduled for Feb 15th. Confirm attendee list and equipment requirements 2 weeks ahead.",
+    venueId: "ven-6",
+    contactId: "con-4",
+    userId: "user-2",
+  },
+  {
+    id: "rec-4",
+    type: "follow-up-email",
+    priority: "medium",
+    title: "Send Beacon Theatre proposal",
+    reason: "David Fernandez mentioned internal approval is underway. Send updated proposal with multi-venue discount.",
+    suggestedContent: `Hi David,
+
+Following up on our quarterly review - I've attached the updated proposal for Beacon Theatre that includes the multi-venue discount we discussed.
+
+The pricing reflects our commitment to the MSG partnership and I'm confident this will align with your budget expectations.
+
+Let me know if you have any questions.
+
+Best regards`,
+    venueId: "ven-3",
+    contactId: "con-1",
+    userId: "user-1",
+    dueBy: "2025-02-04",
+  },
+  {
+    id: "rec-5",
+    type: "check-in",
+    priority: "low",
+    title: "Reach out to Jennifer Adams at Climate Pledge",
+    reason: "New venue with modern infrastructure. OVG is expanding rapidly - building this relationship could lead to more venues.",
+    suggestedContent: `Hi Jennifer,
+
+I hope this message finds you well. I'm reaching out because Climate Pledge Arena caught our attention as a leader in sustainable venue operations.
+
+We work with several venues in the OVG portfolio and I'd love to share how we've helped them improve their concessions operations.
+
+Would you be open to a brief introductory call?
+
+Best regards`,
+    venueId: "ven-9",
+    contactId: "con-8",
+    userId: "user-2",
+  },
+  {
+    id: "rec-6",
+    type: "follow-up-email",
+    priority: "high",
+    title: "Send ROI analysis to MSG leadership",
+    reason: "Q4 performance data shows 23% throughput increase. Package this into an executive summary for expansion discussions.",
+    suggestedContent: `Hi David,
+
+I wanted to share some exciting numbers from Q4. Madison Square Garden saw a 23% increase in order throughput, and Radio City is tracking similarly.
+
+I've put together an executive summary with the full ROI analysis. Would it be helpful if I presented this to your leadership team to support the Beacon Theatre expansion discussion?
+
+Best regards`,
+    venueId: "ven-1",
+    contactId: "con-1",
+    userId: "user-1",
+    dueBy: "2025-02-05",
+  },
+  {
+    id: "rec-7",
+    type: "send-proposal",
+    priority: "medium",
+    title: "Share case study with Barclays Center",
+    reason: "Jennifer Adams expressed interest in seeing results from similar venues. MSG case study would be highly relevant.",
+    venueId: "ven-12",
+    contactId: "con-8",
+    userId: "user-1",
+  },
+  {
+    id: "rec-8",
+    type: "schedule-call",
+    priority: "high",
+    title: "Book SoFi Stadium discovery call",
+    reason: "New inbound lead from VP of Operations. Large venue with $500K potential - respond within 24 hours.",
+    venueId: "ven-10",
+    contactId: "con-5",
+    userId: "user-1",
+  },
+  {
+    id: "rec-9",
+    type: "check-in",
+    priority: "medium",
+    title: "Touch base with Robert Kim at The Forum",
+    reason: "No interaction in 3 weeks. The Forum is a successful client - maintain relationship and explore upsell opportunities.",
+    suggestedContent: `Hi Robert,
+
+I hope everything is running smoothly at The Forum! I wanted to check in and see how things are going with the platform.
+
+Are there any new features or improvements you'd like to discuss? I'd also love to hear about any upcoming events where we could provide additional support.
+
+Best regards`,
+    venueId: "ven-4",
+    contactId: "con-5",
+    userId: "user-1",
+  },
+  {
+    id: "rec-10",
+    type: "follow-up-email",
+    priority: "low",
+    title: "Re-engage T-Mobile Arena contact",
+    reason: "Demo was 2 weeks ago but no response since. Light touch follow-up to keep the conversation warm.",
+    suggestedContent: `Hi there,
+
+I wanted to follow up on the demo we did a couple weeks ago for T-Mobile Arena. I know things get busy, so I just wanted to check if you had any questions or if there's anything else I can provide to help with your evaluation.
+
+Happy to jump on a quick call whenever works for you.
+
+Best regards`,
+    venueId: "ven-11",
+    contactId: "con-6",
+    userId: "user-2",
+  },
+]
+
+// Business insights/news - using dynamic timestamps
+const insightDate = new Date()
+const formatInsightTime = (hoursAgo: number) => {
+  const d = new Date(insightDate.getTime() - hoursAgo * 60 * 60 * 1000)
+  return d.toISOString()
+}
+
+export const businessInsights: BusinessInsight[] = [
+  {
+    id: "ins-1",
+    type: "engagement-metric",
+    title: "MSG venues showing strong engagement",
+    description:
+      "Madison Square Garden reported 23% increase in order throughput since implementation. Radio City also seeing similar gains.",
+    timestamp: formatInsightTime(1),
+    operatorId: "op-2",
+    metric: { value: 23, change: 23, unit: "%" },
+    priority: "positive",
+  },
+  {
+    id: "ins-2",
+    type: "pipeline-alert",
+    title: "Ball Arena deal in final negotiation",
+    description: "High-value deal ($350K) at 75% probability. Contract decision expected by end of week.",
+    timestamp: formatInsightTime(2),
+    venueId: "ven-8",
+    metric: { value: 350000, change: 0, unit: "$" },
+    priority: "urgent",
+  },
+  {
+    id: "ins-3",
+    type: "milestone",
+    title: "Quarterly milestone: 5 venues closed",
+    description: "You've closed 5 venues this quarter, totaling $1.23M in deal value. 2 more in final stages.",
+    timestamp: formatInsightTime(6),
+    priority: "positive",
+  },
+  {
+    id: "ins-4",
+    type: "inbound-activity",
+    title: "New inbound interest from SoFi Stadium",
+    description: "Website inquiry from VP of Operations. Large stadium (70K capacity) with $500K potential deal value.",
+    timestamp: formatInsightTime(12),
+    venueId: "ven-10",
+    priority: "info",
+  },
+  {
+    id: "ins-5",
+    type: "contract-news",
+    title: "Hollywood Bowl 2025 contract pending",
+    description: "Seasonal contract for 2025 awaiting signature. Effective date: May 1st.",
+    timestamp: formatInsightTime(24),
+    venueId: "ven-5",
+    priority: "warning",
+  },
+  {
+    id: "ins-6",
+    type: "engagement-metric",
+    title: "The Forum hits record orders",
+    description: "Saturday night concert saw 15,000+ mobile orders processed with 99.8% uptime. New single-event record.",
+    timestamp: formatInsightTime(3),
+    venueId: "ven-4",
+    metric: { value: 15000, change: 12, unit: "%" },
+    priority: "positive",
+  },
+  {
+    id: "ins-7",
+    type: "pipeline-alert",
+    title: "Beacon Theatre moving to proposal stage",
+    description: "David Fernandez confirmed budget approval. Ready for final proposal review.",
+    timestamp: formatInsightTime(4),
+    venueId: "ven-3",
+    metric: { value: 80000, change: 0, unit: "$" },
+    priority: "info",
+  },
+  {
+    id: "ins-8",
+    type: "inbound-activity",
+    title: "3 new demo requests this week",
+    description: "Inbound demos requested from Chase Center, United Center, and Fenway Park. Total potential: $850K.",
+    timestamp: formatInsightTime(8),
+    metric: { value: 850000, change: 0, unit: "$" },
+    priority: "positive",
+  },
+  {
+    id: "ins-9",
+    type: "contract-news",
+    title: "Live Nation MSA renewal due in 60 days",
+    description: "Master service agreement with Live Nation expires March 31st. Begin renewal discussions soon.",
+    timestamp: formatInsightTime(18),
+    operatorId: "op-1",
+    priority: "warning",
+  },
+  {
+    id: "ins-10",
+    type: "milestone",
+    title: "Customer satisfaction score: 4.8/5",
+    description: "Latest NPS survey shows 4.8/5 satisfaction across all active venues. Up from 4.5 last quarter.",
+    timestamp: formatInsightTime(36),
+    metric: { value: 4.8, change: 0.3, unit: "" },
+    priority: "positive",
+  },
+  {
+    id: "ins-11",
+    type: "pipeline-alert",
+    title: "Red Rocks demo scheduled",
+    description: "Demo confirmed for Feb 15th with VP Operations and IT Director attending. High-interest opportunity.",
+    timestamp: formatInsightTime(5),
+    venueId: "ven-6",
+    metric: { value: 200000, change: 0, unit: "$" },
+    priority: "info",
+  },
+  {
+    id: "ins-12",
+    type: "engagement-metric",
+    title: "Average order value up 18%",
+    description: "Cross-sell recommendations driving higher AOV across all venues. Top performer: Hollywood Bowl at $24.50.",
+    timestamp: formatInsightTime(48),
+    metric: { value: 18, change: 18, unit: "%" },
+    priority: "positive",
+  },
+]
+
+// Dashboard helper functions
+export function getScheduledEventsForUser(userId: string, date?: string) {
+  const targetDate = date || new Date().toISOString().split("T")[0]
+  return scheduledEvents
+    .filter((e) => e.userId === userId && e.startTime.startsWith(targetDate))
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+}
+
+export function getRecommendedActionsForUser(userId: string) {
+  const priorityOrder = { high: 0, medium: 1, low: 2 }
+  return recommendedActions
+    .filter((a) => a.userId === userId)
+    .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
+}
+
+export function getTodosForUser(userId: string) {
+  return todos
+    .filter((t) => t.assignedTo === userId && !t.completed)
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
 }
