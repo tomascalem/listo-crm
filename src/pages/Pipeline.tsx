@@ -350,9 +350,9 @@ function StageColumn({ stage, venues, weightedValue }: StageColumnProps) {
   const showAddButton = stage.key === "lead" || stage.key === "qualified"
 
   return (
-    <div className="flex flex-col min-w-[300px] w-[300px] shrink-0">
-      {/* Stage header */}
-      <div className={`mb-3 p-3 rounded-lg ${stage.headerBg} border ${stage.headerBorder}`}>
+    <div className="flex flex-col min-w-[300px] w-[300px] shrink-0 h-full">
+      {/* Stage header - fixed */}
+      <div className={`shrink-0 mb-3 p-3 rounded-lg ${stage.headerBg} border ${stage.headerBorder}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className={`h-3 w-3 rounded-full ${stage.color}`} />
@@ -368,45 +368,49 @@ function StageColumn({ stage, venues, weightedValue }: StageColumnProps) {
         </div>
       </div>
 
-      {/* Droppable cards container */}
+      {/* Droppable cards container - scrolls vertically */}
       <div
         ref={setNodeRef}
-        className={`flex-1 rounded-lg p-2 transition-colors min-h-[400px] border ${
+        className={`flex-1 min-h-0 rounded-lg p-2 transition-colors border flex flex-col ${
           isOver ? "bg-primary/10 ring-2 ring-primary/30 ring-dashed border-primary/30" : "bg-muted/30 border-border/50"
         }`}
       >
-        <SortableContext items={venues.map((v) => v.id)} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2">
-            {venues.length === 0 ? (
-              // Empty state
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Inbox className="h-8 w-8 text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">No deals</p>
-                <p className="text-xs text-muted-foreground/70">Drag a deal here or add one below</p>
-              </div>
-            ) : (
-              venues.map((venue) => (
-                <DealCard key={venue.id} venue={venue} />
-              ))
-            )}
-          </div>
-        </SortableContext>
-
-        {/* Add deal button at bottom */}
+        {/* Add deal button at top - fixed */}
         {showAddButton && (
-          <AddVenueModal
-            trigger={
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full mt-3 h-9 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border hover:border-primary/50 hover:bg-primary/5"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1.5" />
-                {addButtonText}
-              </Button>
-            }
-          />
+          <div className="shrink-0 pb-2">
+            <AddVenueModal
+              trigger={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full h-9 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border hover:border-primary/50 hover:bg-primary/5"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1.5" />
+                  {addButtonText}
+                </Button>
+              }
+            />
+          </div>
         )}
+
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide">
+          <SortableContext items={venues.map((v) => v.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {venues.length === 0 ? (
+                // Empty state
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Inbox className="h-8 w-8 text-muted-foreground/40 mb-2" />
+                  <p className="text-sm text-muted-foreground">No deals</p>
+                  <p className="text-xs text-muted-foreground/70">Drag a deal here</p>
+                </div>
+              ) : (
+                venues.map((venue) => (
+                  <DealCard key={venue.id} venue={venue} />
+                ))
+              )}
+            </div>
+          </SortableContext>
+        </div>
       </div>
     </div>
   )
@@ -686,12 +690,12 @@ export default function Pipeline() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar />
 
-      <main className="flex-1 lg:pl-64 min-w-0">
+      <main className="flex-1 lg:pl-64 min-w-0 flex flex-col h-screen overflow-hidden">
         {/* Header */}
-        <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <header className="shrink-0 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="flex h-16 items-center justify-between px-6">
             <div>
               <h1 className="text-xl font-semibold text-foreground">Pipeline</h1>
@@ -709,8 +713,8 @@ export default function Pipeline() {
           </div>
         </header>
 
-        {/* Content */}
-        <div className="p-6 space-y-6 overflow-x-hidden">
+        {/* Content - fills remaining height */}
+        <div className="flex-1 flex flex-col min-h-0 px-6 pt-6 space-y-4 overflow-hidden">
           {/* Filters and view toggle */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             {/* Filters */}
@@ -787,16 +791,16 @@ export default function Pipeline() {
             </div>
           </div>
 
-          {/* View content */}
+          {/* View content - fills remaining space */}
           {viewMode === "kanban" && (
             <DndContext
               sensors={sensors}
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
             >
-              {/* Only the kanban scrolls horizontally */}
-              <div className="overflow-x-auto pb-4">
-                <div className="flex gap-4">
+              {/* Kanban fills remaining height, scrolls horizontally */}
+              <div className="flex-1 min-h-0 overflow-x-auto scrollbar-hide">
+                <div className="flex gap-4 h-full">
                   {stages.map((stage) => {
                     const stageVenues = venuesByStage.get(stage.key) || []
                     const weightedValue = stageVenues.reduce(
