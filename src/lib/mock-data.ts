@@ -5,6 +5,32 @@ export type VenueType = "stadium" | "arena" | "amphitheater" | "theater" | "conv
 export type FileType = "deck" | "one-pager" | "proposal" | "report" | "other"
 export type ContractType = "msa" | "sow" | "nda" | "other"
 export type ContractStatus = "active" | "expired" | "pending" | "terminated"
+export type UseCase = "suites" | "back-of-house" | "warehouse" | "labor-tracking"
+
+// Opportunity details - AI auto-completed, user-editable
+export interface OpportunityDetails {
+  useCases: UseCase[]
+  licenses: {
+    watches: number
+    mobile: number
+    tablets: number
+  }
+  onsiteInterest: boolean
+  expectedReleaseDate?: string
+  intel: {
+    source?: string // How they heard about us
+    interests?: string[] // What they're interested in
+    painPoints?: string[] // Problems they're facing
+  }
+}
+
+export interface User {
+  id: string
+  name: string
+  email: string
+  avatar: string
+  avatarUrl?: string
+}
 
 // Files - decks, one-pagers, proposals, reports
 export interface VenueFile {
@@ -131,6 +157,12 @@ export interface Venue {
   concessionaireIds: string[]
   createdAt: string
   lastActivity: string
+  // Opportunity fields
+  imageUrl?: string
+  teamLogoUrl?: string
+  teamName?: string
+  assignedUserIds: string[]
+  opportunity?: OpportunityDetails
 }
 
 export interface Company {
@@ -147,10 +179,10 @@ export interface Company {
   lastActivity: string
 }
 
-export const users = [
-  { id: "user-1", name: "Sarah Chen", email: "sarah@getlisto.io", avatar: "SC" },
-  { id: "user-2", name: "Marcus Johnson", email: "marcus@getlisto.io", avatar: "MJ" },
-  { id: "user-3", name: "Emily Rodriguez", email: "emily@getlisto.io", avatar: "ER" },
+export const users: User[] = [
+  { id: "user-1", name: "Sarah Chen", email: "sarah@getlisto.io", avatar: "SC", avatarUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face" },
+  { id: "user-2", name: "Marcus Johnson", email: "marcus@getlisto.io", avatar: "MJ", avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face" },
+  { id: "user-3", name: "Emily Rodriguez", email: "emily@getlisto.io", avatar: "ER", avatarUrl: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face" },
 ]
 
 // Operators - companies that own/operate venues
@@ -322,6 +354,13 @@ export const companies: Company[] = [
   },
 ]
 
+// Helper for dynamic venue dates
+const venueNow = new Date()
+const formatVenueDate = (daysAgo: number) => {
+  const d = new Date(venueNow.getTime() - daysAgo * 24 * 60 * 60 * 1000)
+  return d.toISOString().split("T")[0]
+}
+
 export const venues: Venue[] = [
   {
     id: "ven-1",
@@ -338,7 +377,22 @@ export const venues: Venue[] = [
     operatorId: "op-2",
     concessionaireIds: ["con-1"],
     createdAt: "2024-03-15",
-    lastActivity: "2025-01-28",
+    lastActivity: formatVenueDate(2),
+    imageUrl: "https://images.unsplash.com/photo-1534158914592-062992fbe900?w=800",
+    teamLogoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/9/9f/New_York_Knicks_logo.svg/200px-New_York_Knicks_logo.svg.png",
+    teamName: "New York Knicks",
+    assignedUserIds: ["user-1", "user-2"],
+    opportunity: {
+      useCases: ["suites", "back-of-house", "labor-tracking"],
+      licenses: { watches: 45, mobile: 120, tablets: 30 },
+      onsiteInterest: true,
+      expectedReleaseDate: "2024-06-01",
+      intel: {
+        source: "Referral from Levy Restaurants",
+        interests: ["Suite service optimization", "Real-time labor tracking", "Premium guest experience"],
+        painPoints: ["Slow suite order delivery", "Staff communication gaps", "High labor costs"],
+      },
+    },
   },
   {
     id: "ven-2",
@@ -355,7 +409,20 @@ export const venues: Venue[] = [
     operatorId: "op-2",
     concessionaireIds: ["con-1"],
     createdAt: "2024-03-20",
-    lastActivity: "2025-01-25",
+    lastActivity: formatVenueDate(5),
+    imageUrl: "https://images.unsplash.com/photo-1514306191717-452ec28c7814?w=800",
+    assignedUserIds: ["user-1"],
+    opportunity: {
+      useCases: ["back-of-house", "labor-tracking"],
+      licenses: { watches: 20, mobile: 45, tablets: 10 },
+      onsiteInterest: false,
+      expectedReleaseDate: "2024-05-15",
+      intel: {
+        source: "MSG Entertainment relationship",
+        interests: ["Backstage coordination", "Event staffing management"],
+        painPoints: ["Complex show logistics", "Variable staffing needs"],
+      },
+    },
   },
   {
     id: "ven-3",
@@ -373,7 +440,20 @@ export const venues: Venue[] = [
     operatorId: "op-2",
     concessionaireIds: ["con-4"],
     createdAt: "2024-11-10",
-    lastActivity: "2025-01-26",
+    lastActivity: formatVenueDate(3),
+    imageUrl: "https://images.unsplash.com/photo-1503095396549-807759245b35?w=800",
+    assignedUserIds: ["user-2"],
+    opportunity: {
+      useCases: ["suites", "back-of-house"],
+      licenses: { watches: 15, mobile: 30, tablets: 8 },
+      onsiteInterest: true,
+      expectedReleaseDate: "2025-03-01",
+      intel: {
+        source: "Cold outreach",
+        interests: ["VIP box service", "Concession efficiency"],
+        painPoints: ["Long wait times at intermission", "Limited staff visibility"],
+      },
+    },
   },
   {
     id: "ven-4",
@@ -390,7 +470,20 @@ export const venues: Venue[] = [
     operatorId: "op-1",
     concessionaireIds: ["con-5"],
     createdAt: "2024-01-10",
-    lastActivity: "2025-01-27",
+    lastActivity: formatVenueDate(1),
+    imageUrl: "https://images.unsplash.com/photo-1549924231-f129b911e442?w=800",
+    assignedUserIds: ["user-3", "user-1"],
+    opportunity: {
+      useCases: ["suites", "warehouse", "labor-tracking"],
+      licenses: { watches: 60, mobile: 150, tablets: 40 },
+      onsiteInterest: true,
+      expectedReleaseDate: "2024-04-01",
+      intel: {
+        source: "Live Nation partnership",
+        interests: ["Full venue deployment", "Inventory management", "Staff scheduling"],
+        painPoints: ["Inventory tracking issues", "Overtime costs", "Multi-vendor coordination"],
+      },
+    },
   },
   {
     id: "ven-5",
@@ -407,7 +500,19 @@ export const venues: Venue[] = [
     operatorId: "op-1",
     concessionaireIds: ["con-1", "con-5"],
     createdAt: "2024-02-15",
-    lastActivity: "2025-01-24",
+    lastActivity: formatVenueDate(4),
+    imageUrl: "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=800",
+    assignedUserIds: ["user-1"],
+    opportunity: {
+      useCases: ["suites", "back-of-house"],
+      licenses: { watches: 35, mobile: 80, tablets: 20 },
+      onsiteInterest: true,
+      intel: {
+        source: "LA Philharmonic connection",
+        interests: ["Outdoor venue operations", "Guest experience"],
+        painPoints: ["Weather-related challenges", "Large crowd management"],
+      },
+    },
   },
   {
     id: "ven-6",
@@ -425,7 +530,20 @@ export const venues: Venue[] = [
     operatorId: "op-1",
     concessionaireIds: ["con-2"],
     createdAt: "2024-12-01",
-    lastActivity: "2025-01-27",
+    lastActivity: formatVenueDate(1),
+    imageUrl: "https://images.unsplash.com/photo-1506157786151-b8491531f063?w=800",
+    assignedUserIds: ["user-2", "user-3"],
+    opportunity: {
+      useCases: ["back-of-house", "warehouse"],
+      licenses: { watches: 25, mobile: 50, tablets: 15 },
+      onsiteInterest: true,
+      expectedReleaseDate: "2025-05-01",
+      intel: {
+        source: "Industry conference",
+        interests: ["Remote venue management", "Inventory for outdoor events"],
+        painPoints: ["Limited storage space", "Seasonal staffing"],
+      },
+    },
   },
   {
     id: "ven-7",
@@ -443,7 +561,22 @@ export const venues: Venue[] = [
     operatorId: "op-3",
     concessionaireIds: ["con-1"],
     createdAt: "2024-11-20",
-    lastActivity: "2025-01-25",
+    lastActivity: formatVenueDate(3),
+    imageUrl: "https://images.unsplash.com/photo-1504450758481-7338eba7524a?w=800",
+    teamLogoUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Los_Angeles_Lakers_logo.svg/200px-Los_Angeles_Lakers_logo.svg.png",
+    teamName: "LA Lakers",
+    assignedUserIds: ["user-3"],
+    opportunity: {
+      useCases: ["suites", "labor-tracking"],
+      licenses: { watches: 40, mobile: 100, tablets: 25 },
+      onsiteInterest: false,
+      expectedReleaseDate: "2025-06-01",
+      intel: {
+        source: "AEG partnership",
+        interests: ["Premium seating service", "Staff efficiency"],
+        painPoints: ["High turnover", "Multi-event scheduling"],
+      },
+    },
   },
   {
     id: "ven-8",
@@ -461,7 +594,22 @@ export const venues: Venue[] = [
     operatorId: "op-5",
     concessionaireIds: ["con-1", "con-3"],
     createdAt: "2024-08-05",
-    lastActivity: "2025-01-26",
+    lastActivity: formatVenueDate(2),
+    imageUrl: "https://images.unsplash.com/photo-1546519638-68e109498ffc?w=800",
+    teamLogoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/7/76/Denver_Nuggets.svg/200px-Denver_Nuggets.svg.png",
+    teamName: "Denver Nuggets",
+    assignedUserIds: ["user-1", "user-2"],
+    opportunity: {
+      useCases: ["suites", "back-of-house", "warehouse", "labor-tracking"],
+      licenses: { watches: 55, mobile: 140, tablets: 35 },
+      onsiteInterest: true,
+      expectedReleaseDate: "2025-04-15",
+      intel: {
+        source: "Kroenke Sports relationship",
+        interests: ["Full platform deployment", "Multi-team support"],
+        painPoints: ["Complex scheduling with multiple teams", "Vendor management"],
+      },
+    },
   },
   {
     id: "ven-9",
@@ -479,7 +627,21 @@ export const venues: Venue[] = [
     operatorId: "op-4",
     concessionaireIds: ["con-4"],
     createdAt: "2025-01-05",
-    lastActivity: "2025-01-24",
+    lastActivity: formatVenueDate(5),
+    imageUrl: "https://images.unsplash.com/photo-1577223625816-7546f13df25d?w=800",
+    teamLogoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/4/48/Seattle_Kraken_official_logo.svg/200px-Seattle_Kraken_official_logo.svg.png",
+    teamName: "Seattle Kraken",
+    assignedUserIds: ["user-2"],
+    opportunity: {
+      useCases: ["suites", "back-of-house"],
+      licenses: { watches: 30, mobile: 70, tablets: 18 },
+      onsiteInterest: true,
+      intel: {
+        source: "Oak View Group connection",
+        interests: ["Sustainability tracking", "Modern arena operations"],
+        painPoints: ["New venue processes", "Staff training"],
+      },
+    },
   },
   {
     id: "ven-10",
@@ -497,7 +659,21 @@ export const venues: Venue[] = [
     operatorId: "op-5",
     concessionaireIds: ["con-5"],
     createdAt: "2025-01-10",
-    lastActivity: "2025-01-20",
+    lastActivity: formatVenueDate(8),
+    imageUrl: "https://images.unsplash.com/photo-1577223625816-7546f13df25d?w=800",
+    teamLogoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/8/8a/Los_Angeles_Rams_logo.svg/200px-Los_Angeles_Rams_logo.svg.png",
+    teamName: "LA Rams",
+    assignedUserIds: ["user-1", "user-3"],
+    opportunity: {
+      useCases: ["suites", "warehouse", "labor-tracking"],
+      licenses: { watches: 100, mobile: 300, tablets: 80 },
+      onsiteInterest: true,
+      intel: {
+        source: "NFL venue initiative",
+        interests: ["Large-scale deployment", "Game day operations"],
+        painPoints: ["Massive event logistics", "Coordination with NFL protocols"],
+      },
+    },
   },
   {
     id: "ven-11",
@@ -515,7 +691,22 @@ export const venues: Venue[] = [
     operatorId: "op-3",
     concessionaireIds: ["con-2"],
     createdAt: "2024-10-15",
-    lastActivity: "2025-01-22",
+    lastActivity: formatVenueDate(6),
+    imageUrl: "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800",
+    teamLogoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/a/ac/Vegas_Golden_Knights_logo.svg/200px-Vegas_Golden_Knights_logo.svg.png",
+    teamName: "Vegas Golden Knights",
+    assignedUserIds: ["user-3", "user-2"],
+    opportunity: {
+      useCases: ["suites", "back-of-house", "labor-tracking"],
+      licenses: { watches: 45, mobile: 110, tablets: 28 },
+      onsiteInterest: false,
+      expectedReleaseDate: "2025-08-01",
+      intel: {
+        source: "MGM Resorts connection",
+        interests: ["Premium hospitality", "VIP experience"],
+        painPoints: ["High service expectations", "Tourism-driven variability"],
+      },
+    },
   },
   {
     id: "ven-12",
@@ -533,7 +724,22 @@ export const venues: Venue[] = [
     operatorId: "op-4",
     concessionaireIds: ["con-1", "con-4"],
     createdAt: "2024-09-20",
-    lastActivity: "2025-01-28",
+    lastActivity: formatVenueDate(0),
+    imageUrl: "https://images.unsplash.com/photo-1504450758481-7338eba7524a?w=800",
+    teamLogoUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Brooklyn_Nets_newlogo.svg/200px-Brooklyn_Nets_newlogo.svg.png",
+    teamName: "Brooklyn Nets",
+    assignedUserIds: ["user-2", "user-1"],
+    opportunity: {
+      useCases: ["suites", "back-of-house", "warehouse"],
+      licenses: { watches: 50, mobile: 120, tablets: 30 },
+      onsiteInterest: true,
+      expectedReleaseDate: "2025-03-15",
+      intel: {
+        source: "Brooklyn Sports & Entertainment",
+        interests: ["Urban venue efficiency", "Concert operations"],
+        painPoints: ["Multi-use venue complexity", "Dense urban logistics"],
+      },
+    },
   },
 ]
 
