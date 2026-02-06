@@ -88,21 +88,24 @@ export function Sidebar() {
         </nav>
 
         {/* User */}
-        <div className="border-t border-sidebar-border p-3">
+        <div className="border-t border-sidebar-border">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start gap-3 px-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-muted/50 focus:outline-none data-[state=open]:bg-muted/50"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground shrink-0">
                   SC
                 </div>
-                <div className="flex flex-1 flex-col items-start text-left">
-                  <span className="text-sm font-medium text-sidebar-foreground">Sarah Chen</span>
-                  <span className="text-xs text-muted-foreground">sarah@getlisto.io</span>
+                <div className="flex flex-1 flex-col items-start min-w-0">
+                  <span className="text-sm font-medium text-sidebar-foreground truncate w-full">Sarah Chen</span>
+                  <span className="text-xs text-muted-foreground truncate w-full">sarah@getlisto.io</span>
                 </div>
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              </Button>
+                <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+              </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" side="top" className="w-56">
+            <DropdownMenuContent align="start" side="top" className="w-56 mb-1 ml-3">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
