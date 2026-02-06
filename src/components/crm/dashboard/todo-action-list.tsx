@@ -9,6 +9,7 @@ import {
   Calendar,
   Clock,
   Bot,
+  RotateCcw,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -33,6 +34,7 @@ const taskTypeConfig: Record<
   call: { icon: Phone, label: "Call", color: "text-emerald-500" },
   meeting: { icon: Calendar, label: "Meeting", color: "text-violet-500" },
   document: { icon: FileText, label: "Document", color: "text-amber-500" },
+  "follow-up": { icon: RotateCcw, label: "Follow-up", color: "text-orange-500" },
   other: { icon: CheckSquare, label: "Task", color: "text-muted-foreground" },
 }
 

@@ -346,17 +346,18 @@ interface StageColumnProps {
   weightedValue: number
   isActiveDropTarget?: boolean
   pendingVenueId?: string
+  isOriginColumn?: boolean
 }
 
-function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pendingVenueId }: StageColumnProps) {
+function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pendingVenueId, isOriginColumn }: StageColumnProps) {
   const totalValue = venues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
 
   const { setNodeRef, isOver } = useDroppable({
     id: stage.key,
   })
 
-  // Highlight column when directly over it OR when over a card within it
-  const showDropHighlight = isOver || isActiveDropTarget
+  // Highlight column when over it (but not if it's the origin column)
+  const showDropHighlight = (isOver && !isOriginColumn) || isActiveDropTarget
 
   // Determine add button text
   const addButtonText = stage.key === "lead" ? "Add Lead" : "Add Deal"
@@ -871,6 +872,7 @@ export default function Pipeline() {
                         weightedValue={weightedValue}
                         isActiveDropTarget={activeDropTarget === stage.key}
                         pendingVenueId={stageChangeDialog?.venue.id}
+                        isOriginColumn={activeVenue?.stage === stage.key}
                       />
                     )
                   })}
