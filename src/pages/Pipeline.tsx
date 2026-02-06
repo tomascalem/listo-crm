@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react"
+import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from "react"
 import { Link } from "react-router-dom"
 import {
   DndContext,
@@ -150,9 +150,10 @@ interface DealCardProps {
   isOverlay?: boolean
   isPendingConfirmation?: boolean
   isReturning?: boolean
+  isCollapsing?: boolean // For smooth collapse when card leaves this column
 }
 
-function DealCard({ venue, isOverlay, isPendingConfirmation, isReturning }: DealCardProps) {
+const DealCard = memo(function DealCard({ venue, isOverlay, isPendingConfirmation, isReturning, isCollapsing }: DealCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const operator = getOperatorById(venue.operatorId)
   const typeConfig = venueTypeConfig[venue.type]
@@ -171,10 +172,24 @@ function DealCard({ venue, isOverlay, isPendingConfirmation, isReturning }: Deal
     isDragging,
   } = useSortable({ id: venue.id })
 
-  const style = {
+  // Handle collapsing animation: false = setup (full height), true = collapse to 0
+  const isCollapsingActive = isCollapsing !== undefined
+  const shouldCollapse = isCollapsing === true
+
+  const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isReturning ? 0 : isDragging ? 0.3 : 1,
+    // Use specific properties instead of 'all' for better performance
+    transition: isCollapsingActive
+      ? 'transform 300ms ease-out, opacity 300ms ease-out, max-height 300ms ease-out, margin 300ms ease-out, padding 300ms ease-out'
+      : transition,
+    opacity: isReturning || shouldCollapse ? 0 : isDragging ? 0.3 : 1,
+    overflow: isCollapsingActive ? 'hidden' : undefined,
+    // When collapsing is active, control the height
+    maxHeight: shouldCollapse ? 0 : isCollapsingActive ? 200 : undefined,
+    marginTop: shouldCollapse ? 0 : undefined,
+    marginBottom: shouldCollapse ? 0 : undefined,
+    paddingTop: shouldCollapse ? 0 : undefined,
+    paddingBottom: shouldCollapse ? 0 : undefined,
   }
 
   const handleCardClick = (e: React.MouseEvent) => {
@@ -189,7 +204,7 @@ function DealCard({ venue, isOverlay, isPendingConfirmation, isReturning }: Deal
     <Card
       className={`bg-card border transition-all cursor-grab active:cursor-grabbing ${
         isPendingConfirmation
-          ? "border-border shadow-xl ring-2 ring-primary/50 relative z-10"
+          ? "border-border shadow-xl ring-2 ring-primary/50"
           : isOverlay
             ? "border-border shadow-xl ring-2 ring-primary/50 rotate-2"
             : attention
@@ -339,7 +354,7 @@ function DealCard({ venue, isOverlay, isPendingConfirmation, isReturning }: Deal
       </div>
     </>
   )
-}
+})
 
 // Droppable stage column component
 interface StageColumnProps {
@@ -351,10 +366,22 @@ interface StageColumnProps {
   isOriginColumn?: boolean
   returningVenueId?: string
   columnRef?: (el: HTMLDivElement | null) => void
+  expandingPlaceholder?: {
+    venueId: string
+    height: number
+    expanded: boolean
+    targetIndex: number
+  } | null
+  collapsingPlaceholder?: {
+    venueId: string
+    height: number
+    collapsed: boolean
+  } | null
 }
 
-function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pendingVenueId, isOriginColumn, returningVenueId, columnRef }: StageColumnProps) {
-  const totalValue = venues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
+const StageColumn = memo(function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pendingVenueId, isOriginColumn, returningVenueId, columnRef, expandingPlaceholder, collapsingPlaceholder }: StageColumnProps) {
+  const totalValue = useMemo(() => venues.reduce((sum, v) => sum + (v.dealValue || 0), 0), [venues])
+  const venueIds = useMemo(() => venues.map((v) => v.id), [venues])
 
   const { setNodeRef, isOver } = useDroppable({
     id: stage.key,
@@ -412,9 +439,9 @@ function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pending
         )}
 
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide p-0.5 -m-0.5">
-          <SortableContext items={venues.map((v) => v.id)} strategy={verticalListSortingStrategy}>
+          <SortableContext items={venueIds} strategy={verticalListSortingStrategy}>
             <div className="space-y-2">
-              {venues.length === 0 ? (
+              {venues.length === 0 && !expandingPlaceholder ? (
                 // Empty state
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <Inbox className="h-8 w-8 text-muted-foreground/40 mb-2" />
@@ -422,14 +449,35 @@ function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pending
                   <p className="text-xs text-muted-foreground/70">Drag a deal here</p>
                 </div>
               ) : (
-                venues.map((venue) => (
-                  <DealCard
-                    key={venue.id}
-                    venue={venue}
-                    isPendingConfirmation={venue.id === pendingVenueId}
-                    isReturning={venue.id === returningVenueId}
-                  />
+                // Always use consistent tree structure to prevent remounting
+                venues.map((venue, index) => (
+                  <React.Fragment key={venue.id}>
+                    {expandingPlaceholder?.targetIndex === index && (
+                      <div
+                        className="overflow-hidden transition-[height,margin] duration-300 ease-out"
+                        style={{
+                          height: expandingPlaceholder.expanded ? expandingPlaceholder.height : 0,
+                          marginBottom: expandingPlaceholder.expanded ? 8 : 0,
+                        }}
+                      />
+                    )}
+                    <DealCard
+                      venue={venue}
+                      isPendingConfirmation={venue.id === pendingVenueId}
+                      isReturning={venue.id === returningVenueId}
+                      isCollapsing={collapsingPlaceholder?.venueId === venue.id ? collapsingPlaceholder.collapsed : undefined}
+                    />
+                  </React.Fragment>
                 ))
+              )}
+              {/* Placeholder at end if target index is past all cards */}
+              {expandingPlaceholder && expandingPlaceholder.targetIndex >= venues.length && (
+                <div
+                  className="overflow-hidden transition-[height] duration-300 ease-out"
+                  style={{
+                    height: expandingPlaceholder.expanded ? expandingPlaceholder.height : 0,
+                  }}
+                />
               )}
             </div>
           </SortableContext>
@@ -437,7 +485,7 @@ function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pending
       </div>
     </div>
   )
-}
+})
 
 // List view component
 function ListView({ venues }: { venues: Venue[] }) {
@@ -619,7 +667,7 @@ function ReturnAnimationOverlay({
 
   return (
     <div
-      className="fixed z-50 pointer-events-none transition-all duration-300 ease-out"
+      className="fixed z-20 pointer-events-none transition-all duration-300 ease-out"
       style={{
         left,
         top,
@@ -643,6 +691,8 @@ export default function Pipeline() {
     venue: Venue
     fromStage: VenueStage
     toStage: VenueStage
+    originalCardRect: DOMRect | null
+    originalIndex: number
   } | null>(null)
   const [returningCard, setReturningCard] = useState<{
     venue: Venue
@@ -651,7 +701,59 @@ export default function Pipeline() {
     startRect: DOMRect | null
     endRect: DOMRect | null
   } | null>(null)
+  // Placeholder that expands to make room for returning card (in origin column)
+  const [expandingPlaceholder, setExpandingPlaceholder] = useState<{
+    venueId: string
+    stage: VenueStage
+    height: number
+    expanded: boolean
+    targetIndex: number
+  } | null>(null)
+  // Placeholder that collapses as card leaves (in destination column)
+  const [collapsingPlaceholder, setCollapsingPlaceholder] = useState<{
+    venueId: string
+    stage: VenueStage
+    height: number
+    collapsed: boolean
+  } | null>(null)
   const columnRefs = useRef<Map<VenueStage, HTMLDivElement>>(new Map())
+
+  // Memoized column ref callbacks to prevent breaking StageColumn's memo
+  const columnRefCallbacks = useMemo(() => {
+    const callbacks = new Map<VenueStage, (el: HTMLDivElement | null) => void>()
+    stages.forEach((stage) => {
+      callbacks.set(stage.key, (el) => {
+        if (el) columnRefs.current.set(stage.key, el)
+      })
+    })
+    return callbacks
+  }, [])
+
+  // Memoized placeholder objects per stage to prevent breaking StageColumn's memo
+  const expandingPlaceholderByStage = useMemo(() => {
+    if (!expandingPlaceholder) return null
+    return {
+      stage: expandingPlaceholder.stage,
+      data: {
+        venueId: expandingPlaceholder.venueId,
+        height: expandingPlaceholder.height,
+        expanded: expandingPlaceholder.expanded,
+        targetIndex: expandingPlaceholder.targetIndex,
+      }
+    }
+  }, [expandingPlaceholder])
+
+  const collapsingPlaceholderByStage = useMemo(() => {
+    if (!collapsingPlaceholder) return null
+    return {
+      stage: collapsingPlaceholder.stage,
+      data: {
+        venueId: collapsingPlaceholder.venueId,
+        height: collapsingPlaceholder.height,
+        collapsed: collapsingPlaceholder.collapsed,
+      }
+    }
+  }, [collapsingPlaceholder])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -688,20 +790,37 @@ export default function Pipeline() {
     return map
   }, [filteredVenues])
 
-  // Calculate totals
-  const totalPipeline = filteredVenues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
-  const weightedPipeline = filteredVenues.reduce((sum, v) => {
-    const stage = stages.find((s) => s.key === v.stage)
-    return sum + ((v.dealValue || 0) * (stage?.probability || 0)) / 100
-  }, 0)
+  // Pre-compute weighted values per stage (avoids calculation in render loop)
+  const weightedValuesByStage = useMemo(() => {
+    const map = new Map<VenueStage, number>()
+    stages.forEach((stage) => {
+      const stageVenues = venuesByStage.get(stage.key) || []
+      const weightedValue = stageVenues.reduce(
+        (sum, v) => sum + ((v.dealValue || 0) * stage.probability) / 100,
+        0
+      )
+      map.set(stage.key, weightedValue)
+    })
+    return map
+  }, [venuesByStage])
 
-  // Drag handlers
-  const handleDragStart = (event: DragStartEvent) => {
+  // Calculate totals (memoized)
+  const { totalPipeline, weightedPipeline } = useMemo(() => {
+    const total = filteredVenues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
+    const weighted = filteredVenues.reduce((sum, v) => {
+      const stage = stages.find((s) => s.key === v.stage)
+      return sum + ((v.dealValue || 0) * (stage?.probability || 0)) / 100
+    }, 0)
+    return { totalPipeline: total, weightedPipeline: weighted }
+  }, [filteredVenues])
+
+  // Drag handlers - wrapped in useCallback for performance
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     const venue = venues.find((v) => v.id === event.active.id)
     if (venue) setActiveVenue(venue)
-  }
+  }, [venues])
 
-  const handleDragOver = (event: DragOverEvent) => {
+  const handleDragOver = useCallback((event: DragOverEvent) => {
     const { over } = event
     if (!over || !activeVenue) {
       setActiveDropTarget(null)
@@ -727,9 +846,17 @@ export default function Pipeline() {
     } else {
       setActiveDropTarget(null)
     }
-  }
+  }, [activeVenue, venues])
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const applyStageChange = useCallback((venueId: string, newStage: VenueStage) => {
+    setVenues((prev) =>
+      prev.map((v) =>
+        v.id === venueId ? { ...v, stage: newStage, lastActivity: new Date().toISOString() } : v
+      )
+    )
+  }, [])
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     setActiveVenue(null)
     setActiveDropTarget(null)
     const { active, over } = event
@@ -760,6 +887,14 @@ export default function Pipeline() {
       const stageJump = Math.abs(toIndex - fromIndex)
 
       if (stageJump > 2) {
+        // Capture the card's original position BEFORE the optimistic update
+        const cardElement = document.querySelector(`[data-venue-id="${draggedVenue.id}"]`)
+        const originalCardRect = cardElement?.getBoundingClientRect() || null
+
+        // Calculate original index in the column
+        const originalVenues = venuesByStage.get(draggedVenue.stage) || []
+        const originalIndex = originalVenues.findIndex(v => v.id === draggedVenue.id)
+
         // Apply change optimistically so card stays at destination
         applyStageChange(draggedVenue.id, targetStage)
         // Show confirmation dialog (can revert if cancelled)
@@ -767,36 +902,49 @@ export default function Pipeline() {
           venue: draggedVenue,
           fromStage: draggedVenue.stage,
           toStage: targetStage,
+          originalCardRect,
+          originalIndex,
         })
       } else {
         // Apply change directly
         applyStageChange(draggedVenue.id, targetStage)
       }
     }
-  }
+  }, [venues, venuesByStage, applyStageChange])
 
-  const applyStageChange = (venueId: string, newStage: VenueStage) => {
-    setVenues((prev) =>
-      prev.map((v) =>
-        v.id === venueId ? { ...v, stage: newStage, lastActivity: new Date().toISOString() } : v
-      )
-    )
-  }
-
-  const confirmStageChange = () => {
+  const confirmStageChange = useCallback(() => {
     // Already applied optimistically, just close the dialog
     setStageChangeDialog(null)
-  }
+  }, [])
 
-  const cancelStageChange = () => {
+  const cancelStageChange = useCallback(() => {
     if (stageChangeDialog) {
       // Get the card element at the current (destination) position
       const cardElement = document.querySelector(`[data-venue-id="${stageChangeDialog.venue.id}"]`)
       const startRect = cardElement?.getBoundingClientRect() || null
 
-      // Get the target column position
-      const targetColumn = columnRefs.current.get(stageChangeDialog.fromStage)
-      const endRect = targetColumn?.getBoundingClientRect() || null
+      // Use the stored original position (captured before the optimistic update)
+      const endRect = stageChangeDialog.originalCardRect
+
+      // Calculate card height for placeholder
+      const cardHeight = startRect?.height || 100
+
+      // Start with collapsed placeholder (height 0) in origin column - will expand
+      setExpandingPlaceholder({
+        venueId: stageChangeDialog.venue.id,
+        stage: stageChangeDialog.fromStage,
+        height: cardHeight,
+        expanded: false,
+        targetIndex: stageChangeDialog.originalIndex,
+      })
+
+      // Start with expanded placeholder in destination column - will collapse
+      setCollapsingPlaceholder({
+        venueId: stageChangeDialog.venue.id,
+        stage: stageChangeDialog.toStage,
+        height: cardHeight,
+        collapsed: false,
+      })
 
       // Start return animation
       setReturningCard({
@@ -810,13 +958,25 @@ export default function Pipeline() {
       // Close dialog immediately
       setStageChangeDialog(null)
 
+      // Expand/collapse placeholders after a brief delay (to trigger CSS transition)
+      requestAnimationFrame(() => {
+        setExpandingPlaceholder((prev) =>
+          prev ? { ...prev, expanded: true } : null
+        )
+        setCollapsingPlaceholder((prev) =>
+          prev ? { ...prev, collapsed: true } : null
+        )
+      })
+
       // After animation, revert the stage and clear animation state
       setTimeout(() => {
         applyStageChange(stageChangeDialog.venue.id, stageChangeDialog.fromStage)
         setReturningCard(null)
+        setExpandingPlaceholder(null)
+        setCollapsingPlaceholder(null)
       }, 300)
     }
-  }
+  }, [stageChangeDialog, applyStageChange])
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -933,23 +1093,27 @@ export default function Pipeline() {
                 <div className="flex gap-4 h-full">
                   {stages.map((stage) => {
                     const stageVenues = venuesByStage.get(stage.key) || []
-                    const weightedValue = stageVenues.reduce(
-                      (sum, v) => sum + ((v.dealValue || 0) * stage.probability) / 100,
-                      0
-                    )
                     return (
                       <StageColumn
                         key={stage.key}
                         stage={stage}
                         venues={stageVenues}
-                        weightedValue={weightedValue}
+                        weightedValue={weightedValuesByStage.get(stage.key) || 0}
                         isActiveDropTarget={activeDropTarget === stage.key}
                         pendingVenueId={stageChangeDialog?.venue.id}
                         isOriginColumn={activeVenue?.stage === stage.key}
                         returningVenueId={returningCard?.venue.id}
-                        columnRef={(el) => {
-                          if (el) columnRefs.current.set(stage.key, el)
-                        }}
+                        columnRef={columnRefCallbacks.get(stage.key)}
+                        expandingPlaceholder={
+                          expandingPlaceholderByStage?.stage === stage.key
+                            ? expandingPlaceholderByStage.data
+                            : null
+                        }
+                        collapsingPlaceholder={
+                          collapsingPlaceholderByStage?.stage === stage.key
+                            ? collapsingPlaceholderByStage.data
+                            : null
+                        }
                       />
                     )
                   })}
