@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import { Link } from "react-router-dom"
 import {
   DndContext,
@@ -149,9 +149,10 @@ interface DealCardProps {
   venue: Venue
   isOverlay?: boolean
   isPendingConfirmation?: boolean
+  isReturning?: boolean
 }
 
-function DealCard({ venue, isOverlay, isPendingConfirmation }: DealCardProps) {
+function DealCard({ venue, isOverlay, isPendingConfirmation, isReturning }: DealCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const operator = getOperatorById(venue.operatorId)
   const typeConfig = venueTypeConfig[venue.type]
@@ -173,7 +174,7 @@ function DealCard({ venue, isOverlay, isPendingConfirmation }: DealCardProps) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.3 : 1,
+    opacity: isReturning ? 0 : isDragging ? 0.3 : 1,
   }
 
   const handleCardClick = (e: React.MouseEvent) => {
@@ -332,6 +333,7 @@ function DealCard({ venue, isOverlay, isPendingConfirmation }: DealCardProps) {
         {...attributes}
         {...listeners}
         className="group"
+        data-venue-id={venue.id}
       >
         {cardContent}
       </div>
@@ -347,9 +349,11 @@ interface StageColumnProps {
   isActiveDropTarget?: boolean
   pendingVenueId?: string
   isOriginColumn?: boolean
+  returningVenueId?: string
+  columnRef?: (el: HTMLDivElement | null) => void
 }
 
-function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pendingVenueId, isOriginColumn }: StageColumnProps) {
+function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pendingVenueId, isOriginColumn, returningVenueId, columnRef }: StageColumnProps) {
   const totalValue = venues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
 
   const { setNodeRef, isOver } = useDroppable({
@@ -364,7 +368,7 @@ function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pending
   const showAddButton = stage.key === "lead" || stage.key === "qualified"
 
   return (
-    <div className="flex flex-col min-w-[300px] w-[300px] shrink-0 h-full">
+    <div ref={columnRef} className="flex flex-col min-w-[300px] w-[300px] shrink-0 h-full">
       {/* Stage header - fixed */}
       <div className={`shrink-0 mb-3 p-3 rounded-lg ${stage.headerBg} border ${stage.headerBorder}`}>
         <div className="flex items-center justify-between">
@@ -423,6 +427,7 @@ function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pending
                     key={venue.id}
                     venue={venue}
                     isPendingConfirmation={venue.id === pendingVenueId}
+                    isReturning={venue.id === returningVenueId}
                   />
                 ))
               )}
@@ -588,6 +593,44 @@ function FunnelView({ venuesByStage }: { venuesByStage: Map<VenueStage, Venue[]>
   )
 }
 
+// Return animation overlay component
+function ReturnAnimationOverlay({
+  venue,
+  startRect,
+  endRect,
+}: {
+  venue: Venue
+  startRect: DOMRect
+  endRect: DOMRect
+}) {
+  const [animationPhase, setAnimationPhase] = useState<"start" | "end">("start")
+
+  useEffect(() => {
+    // Trigger animation to end position after a brief delay
+    const timer = requestAnimationFrame(() => {
+      setAnimationPhase("end")
+    })
+    return () => cancelAnimationFrame(timer)
+  }, [])
+
+  // Calculate position based on animation phase
+  const left = animationPhase === "start" ? startRect.left : endRect.left
+  const top = animationPhase === "start" ? startRect.top : endRect.top
+
+  return (
+    <div
+      className="fixed z-50 pointer-events-none transition-all duration-300 ease-out"
+      style={{
+        left,
+        top,
+        width: startRect.width,
+      }}
+    >
+      <DealCard venue={venue} isOverlay />
+    </div>
+  )
+}
+
 export default function Pipeline() {
   const [venues, setVenues] = useState(allVenues.filter((v) => v.stage !== "closed-lost"))
   const [viewMode, setViewMode] = useState<ViewMode>("kanban")
@@ -601,6 +644,14 @@ export default function Pipeline() {
     fromStage: VenueStage
     toStage: VenueStage
   } | null>(null)
+  const [returningCard, setReturningCard] = useState<{
+    venue: Venue
+    fromStage: VenueStage
+    toStage: VenueStage
+    startRect: DOMRect | null
+    endRect: DOMRect | null
+  } | null>(null)
+  const columnRefs = useRef<Map<VenueStage, HTMLDivElement>>(new Map())
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -739,9 +790,31 @@ export default function Pipeline() {
 
   const cancelStageChange = () => {
     if (stageChangeDialog) {
-      // Revert to original stage
-      applyStageChange(stageChangeDialog.venue.id, stageChangeDialog.fromStage)
+      // Get the card element at the current (destination) position
+      const cardElement = document.querySelector(`[data-venue-id="${stageChangeDialog.venue.id}"]`)
+      const startRect = cardElement?.getBoundingClientRect() || null
+
+      // Get the target column position
+      const targetColumn = columnRefs.current.get(stageChangeDialog.fromStage)
+      const endRect = targetColumn?.getBoundingClientRect() || null
+
+      // Start return animation
+      setReturningCard({
+        venue: stageChangeDialog.venue,
+        fromStage: stageChangeDialog.toStage,
+        toStage: stageChangeDialog.fromStage,
+        startRect,
+        endRect,
+      })
+
+      // Close dialog immediately
       setStageChangeDialog(null)
+
+      // After animation, revert the stage and clear animation state
+      setTimeout(() => {
+        applyStageChange(stageChangeDialog.venue.id, stageChangeDialog.fromStage)
+        setReturningCard(null)
+      }, 300)
     }
   }
 
@@ -873,6 +946,10 @@ export default function Pipeline() {
                         isActiveDropTarget={activeDropTarget === stage.key}
                         pendingVenueId={stageChangeDialog?.venue.id}
                         isOriginColumn={activeVenue?.stage === stage.key}
+                        returningVenueId={returningCard?.venue.id}
+                        columnRef={(el) => {
+                          if (el) columnRefs.current.set(stage.key, el)
+                        }}
                       />
                     )
                   })}
@@ -882,6 +959,15 @@ export default function Pipeline() {
               <DragOverlay>
                 {activeVenue && <DealCard venue={activeVenue} isOverlay />}
               </DragOverlay>
+
+              {/* Return animation overlay */}
+              {returningCard && returningCard.startRect && returningCard.endRect && (
+                <ReturnAnimationOverlay
+                  venue={returningCard.venue}
+                  startRect={returningCard.startRect}
+                  endRect={returningCard.endRect}
+                />
+              )}
             </DndContext>
           )}
 
