@@ -5,7 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Input } from "@/components/ui/input"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Dialog,
   DialogContent,
@@ -40,6 +46,8 @@ import {
   UserPlus,
   Users,
   ExternalLink,
+  X,
+  Search,
   Bot,
   Clock,
 } from "lucide-react"
@@ -89,6 +97,183 @@ function formatFullDate(date: Date) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Team Member Popover                                               */
+/* ------------------------------------------------------------------ */
+function TeamMemberPopover({
+  todo,
+  sharedUsers,
+  onShare,
+  onRemoveShare,
+}: {
+  todo: Todo
+  sharedUsers: ReturnType<typeof getUserById>[]
+  onShare?: (userId: string) => void
+  onRemoveShare?: (userId: string) => void
+}) {
+  const [search, setSearch] = useState("")
+  const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set())
+
+  const owner = getUserById(todo.assignedTo)
+  const sharedUserIds = new Set(todo.sharedWith ?? [])
+
+  // All team members except owner, sorted: added first, then available
+  const allTeamMembers = users.filter((u) => u.id !== todo.assignedTo)
+  const filteredMembers = allTeamMembers.filter(
+    (u) => u.name.toLowerCase().includes(search.toLowerCase()) ||
+           u.email.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const handleToggle = (userId: string) => {
+    if (sharedUserIds.has(userId)) {
+      onRemoveShare?.(userId)
+    } else {
+      onShare?.(userId)
+      setRecentlyAdded((prev) => new Set(prev).add(userId))
+      setTimeout(() => {
+        setRecentlyAdded((prev) => {
+          const next = new Set(prev)
+          next.delete(userId)
+          return next
+        })
+      }, 1500)
+    }
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 data-[state=open]:bg-muted"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <UserPlus className="h-3.5 w-3.5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-72 p-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header with search */}
+        <div className="p-3 border-b border-border space-y-2.5">
+          <div>
+            <h4 className="text-sm font-medium">Collaborators</h4>
+            <p className="text-xs text-muted-foreground">Add team members to this task</p>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search team members..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 pl-8 text-sm"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+
+        {/* Scrollable list */}
+        <div className="max-h-72 overflow-y-auto">
+          {/* Owner - always visible at top */}
+          {owner && (!search || owner.name.toLowerCase().includes(search.toLowerCase())) && (
+            <div className="px-3 py-2 flex items-center gap-2.5 bg-muted/30">
+              <Avatar className="h-8 w-8 ring-2 ring-primary/20">
+                <AvatarImage src={owner.avatarUrl} alt={owner.name} />
+                <AvatarFallback className="text-[10px] bg-primary/10 text-primary">{owner.avatar}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{owner.name}</p>
+                <p className="text-[10px] text-muted-foreground">{owner.email}</p>
+              </div>
+              <Badge variant="secondary" className="text-[10px] h-5 px-1.5 bg-primary/10 text-primary border-0">
+                Owner
+              </Badge>
+            </div>
+          )}
+
+          {/* Team members list */}
+          {filteredMembers.length > 0 ? (
+            <div className="py-1">
+              {filteredMembers.map((user) => {
+                const isAdded = sharedUserIds.has(user.id)
+                const justAdded = recentlyAdded.has(user.id)
+
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    onClick={() => handleToggle(user.id)}
+                    className={cn(
+                      "w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted/50 transition-all text-left group/member",
+                      justAdded && "bg-emerald-500/10",
+                      isAdded && !justAdded && "bg-primary/5"
+                    )}
+                  >
+                    <div className="relative">
+                      <Avatar className={cn("h-8 w-8", isAdded && "ring-2 ring-primary/30")}>
+                        <AvatarImage src={user.avatarUrl} alt={user.name} />
+                        <AvatarFallback className="text-[10px]">{user.avatar}</AvatarFallback>
+                      </Avatar>
+                      {isAdded && (
+                        <div className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-primary flex items-center justify-center ring-2 ring-background">
+                          <Check className="h-2.5 w-2.5 text-primary-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{user.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
+                    </div>
+                    {justAdded ? (
+                      <Badge variant="secondary" className="text-[10px] h-5 px-1.5 bg-emerald-500/15 text-emerald-600 border-0">
+                        <Check className="h-3 w-3 mr-0.5" />
+                        Added
+                      </Badge>
+                    ) : isAdded ? (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] h-5 px-1.5 bg-primary/10 text-primary border-0"
+                      >
+                        Added
+                      </Badge>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-muted-foreground hover:text-primary hover:bg-primary/10"
+                        onClick={(e) => { e.stopPropagation(); handleToggle(user.id) }}
+                      >
+                        Add
+                      </Button>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          ) : search ? (
+            <div className="px-3 py-8 text-center">
+              <Search className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No results for "{search}"</p>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Footer showing count */}
+        {sharedUserIds.size > 0 && (
+          <div className="px-3 py-2 border-t border-border bg-muted/30">
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{sharedUserIds.size}</span> collaborator{sharedUserIds.size !== 1 ? 's' : ''} added
+            </p>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Task Row                                                          */
 /* ------------------------------------------------------------------ */
 function TaskRow({
@@ -99,6 +284,7 @@ function TaskRow({
   onPull,
   onDelete,
   onShare,
+  onRemoveShare,
   onClick,
   isFuture,
   variant = "own",
@@ -112,6 +298,7 @@ function TaskRow({
   onPull?: () => void
   onDelete?: () => void
   onShare?: (userId: string) => void
+  onRemoveShare?: (userId: string) => void
   onClick?: () => void
   isFuture?: boolean
   variant?: "own" | "shared"
@@ -202,7 +389,9 @@ function TaskRow({
           {variant === "own" && sharedUsers.length > 0 && (
             <span className="text-[11px] text-muted-foreground flex items-center gap-1">
               <Users className="h-3 w-3" />
-              {sharedUsers.map((u) => u!.name.split(" ")[0]).join(", ")}
+              {sharedUsers.length <= 2
+                ? sharedUsers.map((u) => u!.name.split(" ")[0]).join(", ")
+                : `${sharedUsers.slice(0, 2).map((u) => u!.name.split(" ")[0]).join(", ")} +${sharedUsers.length - 2}`}
             </span>
           )}
           {todo.source && SourceIcon && (
@@ -231,26 +420,12 @@ function TaskRow({
             <ArrowUpToLine className="h-3.5 w-3.5" />
           </Button>
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7 data-[state=open]:bg-muted" onClick={(e) => e.stopPropagation()}>
-              <UserPlus className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40">
-            {users.filter((u) => u.id !== todo.assignedTo && !todo.sharedWith?.includes(u.id)).map((u) => (
-              <DropdownMenuItem key={u.id} onClick={() => onShare?.(u.id)}>
-                <Avatar className="h-5 w-5 mr-2">
-                  <AvatarFallback className="text-[9px]">{u.avatar}</AvatarFallback>
-                </Avatar>
-                {u.name}
-              </DropdownMenuItem>
-            ))}
-            {users.filter((u) => u.id !== todo.assignedTo && !todo.sharedWith?.includes(u.id)).length === 0 && (
-              <DropdownMenuItem disabled>Shared with everyone</DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <TeamMemberPopover
+          todo={todo}
+          sharedUsers={sharedUsers}
+          onShare={onShare}
+          onRemoveShare={onRemoveShare}
+        />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-7 w-7 data-[state=open]:bg-muted" onClick={(e) => e.stopPropagation()}>
@@ -410,17 +585,20 @@ function TaskDetail({
 
           {/* Shared with */}
           {sharedUsers.length > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Shared with</span>
-              <div className="flex items-center gap-1.5">
-                {sharedUsers.map((u) => (
-                  <span key={u!.id} className="flex items-center gap-1 text-sm">
-                    <Avatar className="h-4 w-4">
-                      <AvatarFallback className="text-[8px] bg-muted">{u!.avatar}</AvatarFallback>
-                    </Avatar>
-                    {u!.name.split(" ")[0]}
-                  </span>
+            <div className="flex items-start justify-between">
+              <span className="text-xs text-muted-foreground pt-0.5">Shared with</span>
+              <div className="flex flex-wrap items-center gap-1 justify-end max-w-[200px]">
+                {sharedUsers.slice(0, 4).map((u) => (
+                  <Avatar key={u!.id} className="h-6 w-6 ring-2 ring-background" title={u!.name}>
+                    <AvatarImage src={u!.avatarUrl} alt={u!.name} />
+                    <AvatarFallback className="text-[9px] bg-muted">{u!.avatar}</AvatarFallback>
+                  </Avatar>
                 ))}
+                {sharedUsers.length > 4 && (
+                  <span className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground ring-2 ring-background">
+                    +{sharedUsers.length - 4}
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -728,6 +906,12 @@ export default function TasksPage() {
   const share = (todoId: string, targetUserId: string) =>
     setSharedExtra((prev) => ({ ...prev, [todoId]: [...(prev[todoId] ?? []), targetUserId] }))
 
+  const removeShare = (todoId: string, targetUserId: string) =>
+    setSharedExtra((prev) => ({
+      ...prev,
+      [todoId]: (prev[todoId] ?? []).filter((id) => id !== targetUserId),
+    }))
+
   const nav = (dir: number) => {
     const d = new Date(selectedDate)
     d.setDate(d.getDate() + dir)
@@ -859,6 +1043,7 @@ export default function TasksPage() {
                           onDraft={t.type === "email" ? () => setEmailTodo(t) : undefined}
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
                         />
@@ -888,6 +1073,7 @@ export default function TasksPage() {
                           onPull={() => pull(t.id)}
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
                         />
@@ -913,6 +1099,7 @@ export default function TasksPage() {
                           onClick={() => setDetailTodo(t)}
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
                         />
@@ -951,6 +1138,7 @@ export default function TasksPage() {
                           onPull={() => pull(t.id)}
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
                         />
@@ -984,6 +1172,7 @@ export default function TasksPage() {
                           variant="shared"
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
                         />
@@ -1012,6 +1201,7 @@ export default function TasksPage() {
                           variant="shared"
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
                         />
@@ -1042,6 +1232,7 @@ export default function TasksPage() {
                           onPull={() => pull(t.id)}
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
                         />

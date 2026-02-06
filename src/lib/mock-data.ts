@@ -196,6 +196,13 @@ export const users: User[] = [
   { id: "user-1", name: "Sarah Chen", email: "sarah@getlisto.io", avatar: "SC", avatarUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face" },
   { id: "user-2", name: "Marcus Johnson", email: "marcus@getlisto.io", avatar: "MJ", avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face" },
   { id: "user-3", name: "Emily Rodriguez", email: "emily@getlisto.io", avatar: "ER", avatarUrl: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face" },
+  { id: "user-4", name: "James Wilson", email: "james@getlisto.io", avatar: "JW", avatarUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop&crop=face" },
+  { id: "user-5", name: "Sofia Martinez", email: "sofia@getlisto.io", avatar: "SM", avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=face" },
+  { id: "user-6", name: "David Kim", email: "david@getlisto.io", avatar: "DK", avatarUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop&crop=face" },
+  { id: "user-7", name: "Rachel Thompson", email: "rachel@getlisto.io", avatar: "RT", avatarUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&h=100&fit=crop&crop=face" },
+  { id: "user-8", name: "Michael Brown", email: "michael@getlisto.io", avatar: "MB", avatarUrl: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face" },
+  { id: "user-9", name: "Jessica Lee", email: "jessica@getlisto.io", avatar: "JL", avatarUrl: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&h=100&fit=crop&crop=face" },
+  { id: "user-10", name: "Andrew Garcia", email: "andrew@getlisto.io", avatar: "AG", avatarUrl: "https://images.unsplash.com/photo-1463453091185-61582044d556?w=100&h=100&fit=crop&crop=face" },
 ]
 
 // Operators - companies that own/operate venues
