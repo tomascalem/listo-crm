@@ -203,6 +203,32 @@ function formatCurrency(amount: number) {
 }
 ```
 
+## Known Issues & Fixes
+
+### shadcn/ui components require React.forwardRef (React 18)
+
+The shadcn/ui components were generated for **React 19**, which passes refs to function components automatically. This project uses **React 18**, which requires `React.forwardRef()`.
+
+**Symptom:** Radix `asChild` components (dropdowns, popovers, tooltips) don't open — content renders in the DOM but stays positioned off-screen at `translate(0, -200%)`. Console shows: `"Function components cannot be given refs"`.
+
+**Root cause:** Without a ref, `@floating-ui` (used by Radix) can't measure the trigger element's position to place the popover/dropdown content.
+
+**Fix:** Any component passed as a child via `asChild` must use `React.forwardRef` and forward the `ref` to its root DOM element. The `Button` component has already been fixed. If new shadcn/ui components are added, ensure they use `forwardRef` if they'll be used with `asChild`.
+
+### Tailwind CSS v4 syntax on v3 runtime
+
+The shadcn/ui components use Tailwind v4-only syntax that is silently ignored by v3. These are cosmetic issues (not functional blockers):
+
+| v4 syntax | v3 equivalent |
+|-----------|--------------|
+| `outline-hidden` | `outline-none` |
+| `origin-(--css-var)` | `origin-[var(--css-var)]` |
+| `max-h-(--css-var)` | `max-h-[var(--css-var)]` |
+| `shadow-xs` | `shadow-sm` |
+| `size-8!` (suffix `!`) | `!size-8` (prefix `!`) |
+
+These have not been converted yet. If visual polish issues arise (missing outlines, wrong shadows, broken animations), check for v4 syntax in `src/components/ui/`.
+
 ## Notes
 
 - Contacts page uses table view only (not cards)
