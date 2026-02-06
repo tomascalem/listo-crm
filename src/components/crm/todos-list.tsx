@@ -51,7 +51,7 @@ function formatDueDate(dateStr: string) {
 }
 
 function TodoItem({ todo, onToggle }: { todo: Todo; onToggle: (id: string) => void }) {
-  const venue = getVenueById(todo.venueId)
+  const venue = todo.venueId ? getVenueById(todo.venueId) : null
   const contact = todo.contactId ? getContactById(todo.contactId) : null
   const assignee = getUserById(todo.assignedTo)
   const dueInfo = formatDueDate(todo.dueDate)
@@ -196,7 +196,7 @@ export function TodosList({ todos, compact }: TodosListProps) {
                 )}>
                   {todo.title}
                 </p>
-                <p className="text-xs text-muted-foreground">{getVenueById(todo.venueId)?.name}</p>
+                <p className="text-xs text-muted-foreground">{todo.venueId ? getVenueById(todo.venueId)?.name : null}</p>
               </div>
               <span className={cn("text-xs", formatDueDate(todo.dueDate).className)}>
                 {formatDueDate(todo.dueDate).text}

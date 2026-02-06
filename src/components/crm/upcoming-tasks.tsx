@@ -57,7 +57,7 @@ export function UpcomingTasks() {
       </CardHeader>
       <CardContent className="space-y-3">
         {upcomingTodos.map((todo) => {
-          const venue = getVenueById(todo.venueId)
+          const venue = todo.venueId ? getVenueById(todo.venueId) : null
           const contact = todo.contactId ? getContactById(todo.contactId) : null
           const dueInfo = formatDueDate(todo.dueDate)
           const isCompleted = completedTasks.has(todo.id)

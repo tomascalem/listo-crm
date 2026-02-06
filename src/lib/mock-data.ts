@@ -126,16 +126,29 @@ export interface Interaction {
   emailThread?: EmailMessage[]
 }
 
+export type TaskType = "email" | "call" | "meeting" | "document" | "follow-up" | "other"
+
+export interface TodoSource {
+  type: "email" | "call" | "meeting" | "ai" | "manual"
+  label: string
+  interactionId?: string
+}
+
 export interface Todo {
   id: string
   title: string
   description?: string
   dueDate: string
+  dueTime?: string
   completed: boolean
   priority: "low" | "medium" | "high"
+  type: TaskType
   assignedTo: string
-  venueId: string
+  sharedWith?: string[]
+  createdBy: string
+  venueId?: string
   contactId?: string
+  source?: TodoSource
 }
 
 // Venues are the main entity - each has an operator and concessionaire(s)
@@ -1042,144 +1055,376 @@ Account Executive | List`,
   },
 ]
 
-// Dynamic due dates for todos
-const todayDate = new Date()
-const formatTodoDate = (daysFromNow: number) => {
-  const d = new Date(todayDate.getTime() + daysFromNow * 24 * 60 * 60 * 1000)
-  return d.toISOString().split("T")[0]
-}
-
 export const todos: Todo[] = [
+  // ========== TODAY ==========
   {
     id: "todo-1",
-    title: "Send Beacon Theatre proposal",
-    description: "Updated pricing proposal with multi-venue discount",
-    dueDate: formatTodoDate(-2), // 2 days overdue
+    title: "Email David Fernandez about Beacon Theatre timeline",
+    description: "Send updated pricing proposal with multi-venue discount. Confirm April go-live works for their schedule.",
+    dueDate: "2026-02-05",
+    dueTime: "10:00 AM",
     completed: false,
     priority: "high",
+    type: "email",
     assignedTo: "user-1",
+    createdBy: "user-1",
     venueId: "ven-3",
     contactId: "con-1",
+    source: { type: "call", label: "From QBR call on Jan 28", interactionId: "int-1" },
   },
   {
     id: "todo-2",
-    title: "Schedule Red Rocks demo",
-    description: "Confirm stakeholder availability for Feb 15th demo",
-    dueDate: formatTodoDate(1),
+    title: "Call Michael Brown - Ball Arena pricing",
+    description: "Follow up on revised proposal. He mentioned competitor is 15% lower - need to emphasize value.",
+    dueDate: "2026-02-05",
+    dueTime: "2:00 PM",
     completed: false,
     priority: "high",
-    assignedTo: "user-2",
-    venueId: "ven-6",
-    contactId: "con-4",
+    type: "call",
+    assignedTo: "user-1",
+    createdBy: "user-1",
+    venueId: "ven-8",
+    contactId: "con-7",
+    source: { type: "call", label: "From call on Jan 26", interactionId: "int-3" },
   },
   {
     id: "todo-3",
-    title: "Prepare Ball Arena pricing proposal",
-    description: "Creative pricing structure to address budget concerns",
-    dueDate: formatTodoDate(0), // Due today
+    title: "Review Red Rocks demo deck",
+    description: "Marcus needs feedback before Feb 15th demo. Focus on offline capabilities section.",
+    dueDate: "2026-02-05",
     completed: false,
-    priority: "high",
+    priority: "medium",
+    type: "document",
     assignedTo: "user-1",
-    venueId: "ven-8",
-    contactId: "con-7",
+    sharedWith: ["user-2"],
+    createdBy: "user-2",
+    venueId: "ven-6",
+    source: { type: "manual", label: "Created by Marcus Johnson" },
   },
   {
     id: "todo-4",
-    title: "Technical architecture document for AEG",
-    description: "Address IT team concerns about legacy system integration",
-    dueDate: formatTodoDate(3),
-    completed: false,
+    title: "Follow up with Amanda Torres - leadership decision",
+    description: "Check if leadership approved moving forward after her presentation last week.",
+    dueDate: "2026-02-05",
+    dueTime: "11:00 AM",
+    completed: true,
     priority: "medium",
-    assignedTo: "user-3",
-    venueId: "ven-7",
-    contactId: "con-6",
+    type: "follow-up",
+    assignedTo: "user-1",
+    createdBy: "user-1",
+    venueId: "ven-5",
+    contactId: "con-4",
+    source: { type: "ai", label: "Auto-created after demo on Jan 20", interactionId: "int-6" },
   },
   {
-    id: "todo-5",
-    title: "Initial outreach to Climate Pledge Arena",
-    description: "Schedule introductory call with Jennifer Adams",
-    dueDate: formatTodoDate(7),
+    id: "todo-16",
+    title: "Review contract terms for Ball Arena",
+    description: "Legal sent over revised terms. Need to check pricing section before sending to Michael.",
+    dueDate: "2026-02-05",
+    dueTime: "4:00 PM",
+    completed: false,
+    priority: "medium",
+    type: "document",
+    assignedTo: "user-1",
+    createdBy: "user-1",
+    venueId: "ven-8",
+    source: { type: "email", label: "From legal team email" },
+  },
+  {
+    id: "todo-17",
+    title: "Send thank you note to Amanda Torres",
+    description: "She went above and beyond getting the leadership meeting scheduled quickly.",
+    dueDate: "2026-02-05",
     completed: false,
     priority: "low",
-    assignedTo: "user-2",
-    venueId: "ven-9",
-    contactId: "con-8",
+    type: "email",
+    assignedTo: "user-1",
+    createdBy: "user-1",
+    venueId: "ven-5",
+    contactId: "con-4",
+    source: { type: "manual", label: "Manually created" },
+  },
+  {
+    id: "todo-23",
+    title: "Respond to Michelle Park about analytics timeline",
+    description: "She emailed about the custom dashboard project - give her a realistic timeline estimate.",
+    dueDate: "2026-02-05",
+    dueTime: "3:00 PM",
+    completed: true,
+    priority: "high",
+    type: "email",
+    assignedTo: "user-1",
+    createdBy: "user-1",
+    venueId: "ven-1",
+    contactId: "con-2",
+    source: { type: "email", label: "From email on Jan 25", interactionId: "int-1b" },
+  },
+
+  // ========== OVERDUE ==========
+  {
+    id: "todo-15",
+    title: "Email Michelle Park - custom dashboard specs",
+    description: "She requested detailed requirements for the analytics dashboard two days ago.",
+    dueDate: "2026-02-03",
+    completed: false,
+    priority: "high",
+    type: "email",
+    assignedTo: "user-1",
+    createdBy: "user-1",
+    venueId: "ven-1",
+    contactId: "con-2",
+    source: { type: "email", label: "From email on Jan 25", interactionId: "int-1b" },
+  },
+
+  // ========== TOMORROW ==========
+  {
+    id: "todo-5",
+    title: "Prep materials for AEG technical review",
+    description: "Address IT team concerns about legacy system integration. Include SOC 2 docs.",
+    dueDate: "2026-02-06",
+    dueTime: "10:00 AM",
+    completed: false,
+    priority: "high",
+    type: "document",
+    assignedTo: "user-3",
+    sharedWith: ["user-1"],
+    createdBy: "user-1",
+    venueId: "ven-7",
+    contactId: "con-6",
+    source: { type: "meeting", label: "From site visit on Jan 25", interactionId: "int-4" },
   },
   {
     id: "todo-6",
-    title: "Follow up on Amanda's leadership presentation",
-    description: "Check if leadership approved moving forward",
-    dueDate: formatTodoDate(-1), // 1 day overdue
+    title: "Schedule demo with Red Rocks stakeholders",
+    description: "Confirm final attendee list and book travel for demo team.",
+    dueDate: "2026-02-06",
     completed: false,
-    priority: "medium",
-    assignedTo: "user-1",
-    venueId: "ven-5",
+    priority: "high",
+    type: "meeting",
+    assignedTo: "user-2",
+    createdBy: "user-2",
+    venueId: "ven-6",
     contactId: "con-4",
+    source: { type: "email", label: "From email thread on Jan 27", interactionId: "int-2" },
   },
   {
+    id: "todo-21",
+    title: "Call James Wilson - MSG POS integration",
+    description: "Technical sync on Square integration. Send sandbox credentials beforehand.",
+    dueDate: "2026-02-06",
+    dueTime: "11:30 AM",
+    completed: false,
+    priority: "high",
+    type: "call",
+    assignedTo: "user-1",
+    createdBy: "user-1",
+    venueId: "ven-1",
+    contactId: "con-3",
+    source: { type: "call", label: "From tech call on Jan 22", interactionId: "int-1c" },
+  },
+  {
+    id: "todo-22",
+    title: "Email Tom Williams - SoFi Stadium intro",
+    description: "Hot inbound lead. System crashed during Rams games. Emphasize our 99.99% uptime.",
+    dueDate: "2026-02-06",
+    dueTime: "9:00 AM",
+    completed: false,
+    priority: "high",
+    type: "email",
+    assignedTo: "user-1",
+    createdBy: "user-1",
+    venueId: "ven-10",
+    source: { type: "email", label: "Inbound email on Jan 27", interactionId: "int-7" },
+  },
+
+  // ========== FEB 7 ==========
+  {
     id: "todo-7",
-    title: "MSG quarterly report preparation",
-    dueDate: formatTodoDate(12),
+    title: "Email Lisa Chen - Crypto.com Arena next steps",
+    description: "Send technical architecture document and schedule follow-up call.",
+    dueDate: "2026-02-07",
     completed: false,
     priority: "medium",
-    assignedTo: "user-1",
-    venueId: "ven-1",
-    contactId: "con-1",
+    type: "email",
+    assignedTo: "user-3",
+    createdBy: "user-3",
+    venueId: "ven-7",
+    contactId: "con-6",
+    source: { type: "meeting", label: "From site visit on Jan 25", interactionId: "int-4" },
   },
   {
     id: "todo-8",
-    title: "Call SoFi Stadium VP back",
-    description: "Respond to inbound inquiry within 24 hours",
-    dueDate: formatTodoDate(0), // Due today
+    title: "Team sync: Q1 pipeline review",
+    description: "Review all active deals and discuss strategy for Ball Arena and AEG.",
+    dueDate: "2026-02-07",
+    dueTime: "3:00 PM",
     completed: false,
-    priority: "high",
+    priority: "medium",
+    type: "meeting",
     assignedTo: "user-1",
-    venueId: "ven-10",
-    contactId: "con-5",
+    sharedWith: ["user-2", "user-3"],
+    createdBy: "user-1",
+    source: { type: "manual", label: "Weekly recurring" },
   },
   {
     id: "todo-9",
-    title: "Review Barclays Center contract terms",
-    description: "Legal team needs feedback on proposed terms",
-    dueDate: formatTodoDate(2),
+    title: "Call Robert Kim - Forum VIP module",
+    description: "Present new VIP suite features. He's interested in premium experiences.",
+    dueDate: "2026-02-08",
+    dueTime: "2:00 PM",
     completed: false,
     priority: "medium",
-    assignedTo: "user-1",
-    venueId: "ven-12",
-    contactId: "con-8",
+    type: "call",
+    assignedTo: "user-2",
+    createdBy: "user-2",
+    venueId: "ven-4",
+    contactId: "con-5",
+    source: { type: "call", label: "From review call on Jan 23", interactionId: "int-2b" },
   },
+
+  // ========== NEXT WEEK+ ==========
   {
     id: "todo-10",
-    title: "Update CRM with T-Mobile Arena notes",
-    description: "Add meeting notes and next steps from site walk",
-    dueDate: formatTodoDate(1),
+    title: "Initial outreach to Climate Pledge Arena",
+    description: "Schedule introductory call with Jennifer Adams. Emphasize sustainability features.",
+    dueDate: "2026-02-10",
     completed: false,
     priority: "low",
+    type: "email",
     assignedTo: "user-2",
-    venueId: "ven-11",
-    contactId: "con-6",
+    createdBy: "user-2",
+    venueId: "ven-9",
+    contactId: "con-8",
+    source: { type: "call", label: "From discovery call on Jan 29", interactionId: "int-5b" },
   },
   {
     id: "todo-11",
-    title: "Send MSG success metrics to marketing",
-    description: "23% throughput increase data for case study",
-    dueDate: formatTodoDate(5),
+    title: "Prepare MSG quarterly report",
+    description: "Compile Q4 metrics: throughput increase, NPS scores, wait time reduction.",
+    dueDate: "2026-02-12",
     completed: false,
     priority: "medium",
+    type: "document",
     assignedTo: "user-1",
+    createdBy: "user-1",
     venueId: "ven-1",
     contactId: "con-1",
+    source: { type: "meeting", label: "From QBR on Jan 28", interactionId: "int-1" },
   },
   {
     id: "todo-12",
-    title: "Prep demo environment for Red Rocks",
-    description: "Configure outdoor venue settings and offline mode",
-    dueDate: formatTodoDate(10),
+    title: "Follow up: Red Rocks demo feedback",
+    description: "Call Amanda after the demo to gather feedback and discuss next steps.",
+    dueDate: "2026-02-17",
     completed: false,
-    priority: "medium",
-    assignedTo: "user-3",
+    priority: "high",
+    type: "follow-up",
+    assignedTo: "user-2",
+    createdBy: "user-2",
     venueId: "ven-6",
     contactId: "con-4",
+    source: { type: "ai", label: "Auto-created after demo scheduling" },
+  },
+
+  // ========== COMPLETED (yesterday) ==========
+  {
+    id: "todo-13",
+    title: "Send Ball Arena case studies",
+    description: "Chase Center and United Center examples for Michael.",
+    dueDate: "2026-02-04",
+    completed: true,
+    priority: "high",
+    type: "email",
+    assignedTo: "user-1",
+    createdBy: "user-1",
+    venueId: "ven-8",
+    contactId: "con-7",
+    source: { type: "email", label: "From email on Jan 23" },
+  },
+  {
+    id: "todo-14",
+    title: "Update CRM with MSG QBR notes",
+    description: "Add interaction notes from quarterly business review.",
+    dueDate: "2026-02-04",
+    completed: true,
+    priority: "low",
+    type: "other",
+    assignedTo: "user-1",
+    createdBy: "user-1",
+    venueId: "ven-1",
+    source: { type: "ai", label: "Auto-created after QBR", interactionId: "int-1" },
+  },
+
+  // ========== SHARED WITH USER-1 (assigned to others) ==========
+  {
+    id: "todo-18",
+    title: "Finalize demo environment setup",
+    description: "Need staging environment ready for Red Rocks demo. Sarah to review before go-live.",
+    dueDate: "2026-02-05",
+    completed: false,
+    priority: "high",
+    type: "other",
+    assignedTo: "user-2",
+    sharedWith: ["user-1"],
+    createdBy: "user-2",
+    venueId: "ven-6",
+    source: { type: "manual", label: "Created by Marcus Johnson" },
+  },
+  {
+    id: "todo-24",
+    title: "Review Barclays Center pricing feedback",
+    description: "Steven Park pushed back on pricing. Emily drafting counter-proposal, needs Sarah's input.",
+    dueDate: "2026-02-05",
+    completed: false,
+    priority: "medium",
+    type: "document",
+    assignedTo: "user-3",
+    sharedWith: ["user-1"],
+    createdBy: "user-3",
+    venueId: "ven-12",
+    source: { type: "call", label: "From negotiation call on Jan 27", interactionId: "int-9" },
+  },
+  {
+    id: "todo-25",
+    title: "Draft Forum VIP suite proposal",
+    description: "Robert Kim wants a premium VIP experience. Marcus working on first draft.",
+    dueDate: "2026-02-05",
+    completed: true,
+    priority: "medium",
+    type: "document",
+    assignedTo: "user-2",
+    sharedWith: ["user-1"],
+    createdBy: "user-2",
+    venueId: "ven-4",
+    source: { type: "call", label: "From review on Jan 23", interactionId: "int-2b" },
+  },
+  {
+    id: "todo-19",
+    title: "Update security documentation for AEG",
+    description: "AEG needs updated SOC 2 compliance docs. Emily working on this.",
+    dueDate: "2026-02-06",
+    completed: false,
+    priority: "high",
+    type: "document",
+    assignedTo: "user-3",
+    sharedWith: ["user-1"],
+    createdBy: "user-3",
+    venueId: "ven-7",
+    source: { type: "meeting", label: "From site visit on Jan 25", interactionId: "int-4" },
+  },
+  {
+    id: "todo-20",
+    title: "Coordinate travel for Red Rocks visit",
+    description: "Book flights and hotel for demo team. Feb 14-16.",
+    dueDate: "2026-02-07",
+    completed: false,
+    priority: "medium",
+    type: "other",
+    assignedTo: "user-2",
+    sharedWith: ["user-1", "user-3"],
+    createdBy: "user-2",
+    venueId: "ven-6",
+    source: { type: "manual", label: "Created by Marcus Johnson" },
   },
 ]
 
@@ -1616,14 +1861,14 @@ export function getTodosByVenueId(venueId: string) {
 export function getTodosByOperatorId(operatorId: string) {
   const operatorVenues = getVenuesByOperatorId(operatorId)
   const venueIds = operatorVenues.map((v) => v.id)
-  return todos.filter((t) => venueIds.includes(t.venueId))
+  return todos.filter((t) => t.venueId && venueIds.includes(t.venueId))
 }
 
 // Legacy function
 export function getTodosByCompanyId(companyId: string) {
   const companyVenues = getVenuesByCompanyId(companyId)
   const venueIds = companyVenues.map((v) => v.id)
-  return todos.filter((t) => venueIds.includes(t.venueId))
+  return todos.filter((t) => t.venueId && venueIds.includes(t.venueId))
 }
 
 export function getUserById(id: string) {

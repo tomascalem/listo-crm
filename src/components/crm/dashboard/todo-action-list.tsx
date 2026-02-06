@@ -98,7 +98,7 @@ export function TodoActionList({ userId, limit = 5 }: TodoActionListProps) {
         ) : (
           <div className="space-y-2">
             {todos.map((todo) => {
-              const venue = getVenueById(todo.venueId)
+              const venue = todo.venueId ? getVenueById(todo.venueId) : null
               const contact = todo.contactId ? getContactById(todo.contactId) : null
               const dueStatus = getDueStatus(todo.dueDate)
               const actionType = getActionType(todo.title)
