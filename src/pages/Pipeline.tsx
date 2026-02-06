@@ -10,6 +10,7 @@ import {
   useDroppable,
   type DragStartEvent,
   type DragEndEvent,
+  type DragOverEvent,
 } from "@dnd-kit/core"
 import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -147,9 +148,10 @@ function needsAttention(venue: Venue): boolean {
 interface DealCardProps {
   venue: Venue
   isOverlay?: boolean
+  isPendingConfirmation?: boolean
 }
 
-function DealCard({ venue, isOverlay }: DealCardProps) {
+function DealCard({ venue, isOverlay, isPendingConfirmation }: DealCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const operator = getOperatorById(venue.operatorId)
   const typeConfig = venueTypeConfig[venue.type]
@@ -184,9 +186,15 @@ function DealCard({ venue, isOverlay }: DealCardProps) {
 
   const cardContent = (
     <Card
-      className={`bg-card border border-border hover:border-primary/40 hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${
-        isOverlay ? "shadow-xl ring-2 ring-primary/50 rotate-2" : "shadow-sm"
-      } ${attention ? "ring-1 ring-warning/50" : ""}`}
+      className={`bg-card border transition-all cursor-grab active:cursor-grabbing ${
+        isPendingConfirmation
+          ? "border-border shadow-xl ring-2 ring-primary/50 relative z-10"
+          : isOverlay
+            ? "border-border shadow-xl ring-2 ring-primary/50 rotate-2"
+            : attention
+              ? "border-border ring-1 ring-warning/50 shadow-sm hover:border-primary/40 hover:shadow-md"
+              : "border-border shadow-sm hover:border-primary/40 hover:shadow-md"
+      }`}
       onClick={handleCardClick}
     >
       <CardContent className="px-3 py-1.5">
@@ -336,14 +344,19 @@ interface StageColumnProps {
   stage: (typeof stages)[0]
   venues: Venue[]
   weightedValue: number
+  isActiveDropTarget?: boolean
+  pendingVenueId?: string
 }
 
-function StageColumn({ stage, venues, weightedValue }: StageColumnProps) {
+function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pendingVenueId }: StageColumnProps) {
   const totalValue = venues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
 
   const { setNodeRef, isOver } = useDroppable({
     id: stage.key,
   })
+
+  // Highlight column when directly over it OR when over a card within it
+  const showDropHighlight = isOver || isActiveDropTarget
 
   // Determine add button text
   const addButtonText = stage.key === "lead" ? "Add Lead" : "Add Deal"
@@ -372,7 +385,7 @@ function StageColumn({ stage, venues, weightedValue }: StageColumnProps) {
       <div
         ref={setNodeRef}
         className={`flex-1 min-h-0 rounded-lg p-2 transition-colors border flex flex-col ${
-          isOver ? "bg-primary/10 ring-2 ring-primary/30 ring-dashed border-primary/30" : "bg-muted/30 border-border/50"
+          showDropHighlight ? "bg-primary/10 ring-2 ring-primary/30 ring-dashed border-primary/30" : "bg-muted/30 border-border/50"
         }`}
       >
         {/* Add deal button at top - fixed */}
@@ -393,7 +406,7 @@ function StageColumn({ stage, venues, weightedValue }: StageColumnProps) {
           </div>
         )}
 
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide p-0.5 -m-0.5">
           <SortableContext items={venues.map((v) => v.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-2">
               {venues.length === 0 ? (
@@ -405,7 +418,11 @@ function StageColumn({ stage, venues, weightedValue }: StageColumnProps) {
                 </div>
               ) : (
                 venues.map((venue) => (
-                  <DealCard key={venue.id} venue={venue} />
+                  <DealCard
+                    key={venue.id}
+                    venue={venue}
+                    isPendingConfirmation={venue.id === pendingVenueId}
+                  />
                 ))
               )}
             </div>
@@ -577,6 +594,7 @@ export default function Pipeline() {
   const [operatorFilter, setOperatorFilter] = useState<string>("all")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [activeVenue, setActiveVenue] = useState<Venue | null>(null)
+  const [activeDropTarget, setActiveDropTarget] = useState<VenueStage | null>(null)
   const [stageChangeDialog, setStageChangeDialog] = useState<{
     venue: Venue
     fromStage: VenueStage
@@ -631,8 +649,37 @@ export default function Pipeline() {
     if (venue) setActiveVenue(venue)
   }
 
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over } = event
+    if (!over || !activeVenue) {
+      setActiveDropTarget(null)
+      return
+    }
+
+    let targetStage: VenueStage | null = null
+
+    // Check if over a stage column directly
+    if (stages.some((s) => s.key === over.id)) {
+      targetStage = over.id as VenueStage
+    } else {
+      // Over a card - find its stage
+      const targetVenue = venues.find((v) => v.id === over.id)
+      if (targetVenue) {
+        targetStage = targetVenue.stage
+      }
+    }
+
+    // Only highlight if moving to a different column
+    if (targetStage && targetStage !== activeVenue.stage) {
+      setActiveDropTarget(targetStage)
+    } else {
+      setActiveDropTarget(null)
+    }
+  }
+
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveVenue(null)
+    setActiveDropTarget(null)
     const { active, over } = event
 
     if (!over) return
@@ -661,7 +708,9 @@ export default function Pipeline() {
       const stageJump = Math.abs(toIndex - fromIndex)
 
       if (stageJump > 2) {
-        // Show confirmation dialog
+        // Apply change optimistically so card stays at destination
+        applyStageChange(draggedVenue.id, targetStage)
+        // Show confirmation dialog (can revert if cancelled)
         setStageChangeDialog({
           venue: draggedVenue,
           fromStage: draggedVenue.stage,
@@ -683,8 +732,14 @@ export default function Pipeline() {
   }
 
   const confirmStageChange = () => {
+    // Already applied optimistically, just close the dialog
+    setStageChangeDialog(null)
+  }
+
+  const cancelStageChange = () => {
     if (stageChangeDialog) {
-      applyStageChange(stageChangeDialog.venue.id, stageChangeDialog.toStage)
+      // Revert to original stage
+      applyStageChange(stageChangeDialog.venue.id, stageChangeDialog.fromStage)
       setStageChangeDialog(null)
     }
   }
@@ -796,6 +851,7 @@ export default function Pipeline() {
             <DndContext
               sensors={sensors}
               onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
               onDragEnd={handleDragEnd}
             >
               {/* Kanban fills remaining height, scrolls horizontally */}
@@ -813,6 +869,8 @@ export default function Pipeline() {
                         stage={stage}
                         venues={stageVenues}
                         weightedValue={weightedValue}
+                        isActiveDropTarget={activeDropTarget === stage.key}
+                        pendingVenueId={stageChangeDialog?.venue.id}
                       />
                     )
                   })}
@@ -832,7 +890,7 @@ export default function Pipeline() {
       </main>
 
       {/* Stage change confirmation dialog */}
-      <Dialog open={!!stageChangeDialog} onOpenChange={() => setStageChangeDialog(null)}>
+      <Dialog open={!!stageChangeDialog} onOpenChange={(open) => !open && cancelStageChange()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirm Stage Change</DialogTitle>
@@ -856,7 +914,7 @@ export default function Pipeline() {
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setStageChangeDialog(null)}>
+            <Button variant="outline" onClick={cancelStageChange}>
               Cancel
             </Button>
             <Button onClick={confirmStageChange}>Confirm</Button>
