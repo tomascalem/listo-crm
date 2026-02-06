@@ -29,7 +29,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
-  Users,
   ArrowUpToLine,
   Sparkles,
   Circle,
@@ -38,7 +37,8 @@ import {
   Copy,
   Pencil,
   Trash2,
-  Share2,
+  UserPlus,
+  Users,
   ExternalLink,
   Bot,
   Clock,
@@ -218,19 +218,8 @@ function TaskRow({
         </div>
       </button>
 
-      {/* Hover actions */}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        {todo.type === "email" && !done && onDraft && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs gap-1"
-            onClick={(e) => { e.stopPropagation(); onDraft() }}
-          >
-            <Sparkles className="h-3 w-3" />
-            Draft
-          </Button>
-        )}
+      {/* Hover actions - top right */}
+      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 has-[[data-state=open]]:opacity-100 transition-opacity shrink-0">
         {isFuture && !done && onPull && (
           <Button
             variant="ghost"
@@ -244,8 +233,8 @@ function TaskRow({
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => e.stopPropagation()}>
-              <Share2 className="h-3.5 w-3.5" />
+            <Button variant="ghost" size="icon" className="h-7 w-7 data-[state=open]:bg-muted" onClick={(e) => e.stopPropagation()}>
+              <UserPlus className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
@@ -264,7 +253,7 @@ function TaskRow({
         </DropdownMenu>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon" className="h-7 w-7 data-[state=open]:bg-muted" onClick={(e) => e.stopPropagation()}>
               <Pencil className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
@@ -287,6 +276,22 @@ function TaskRow({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Draft button - bottom right */}
+      {todo.type === "email" && !done && onDraft && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="group/draft absolute bottom-1.5 right-2 h-6 px-2 text-xs gap-1.5 opacity-0 group-hover:opacity-100 transition-all hover:bg-violet-500/10 hover:text-violet-600 dark:hover:text-violet-400"
+          onClick={(e) => { e.stopPropagation(); onDraft() }}
+        >
+          <Sparkles className="h-3 w-3 group-hover/draft:animate-pulse" />
+          <span className="relative overflow-hidden">
+            Draft
+            <span className="absolute inset-0 -translate-x-full group-hover/draft:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-violet-400/30 to-transparent" />
+          </span>
+        </Button>
+      )}
     </div>
   )
 }
