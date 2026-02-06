@@ -102,6 +102,8 @@ function TaskRow({
   onClick,
   isFuture,
   variant = "own",
+  isFlashing = false,
+  isAnimating = false,
 }: {
   todo: Todo
   done: boolean
@@ -113,6 +115,8 @@ function TaskRow({
   onClick?: () => void
   isFuture?: boolean
   variant?: "own" | "shared"
+  isFlashing?: boolean
+  isAnimating?: boolean
 }) {
   const venue = todo.venueId ? getVenueById(todo.venueId) : null
   const contact = todo.contactId ? getContactById(todo.contactId) : null
@@ -125,8 +129,14 @@ function TaskRow({
   return (
     <div
       className={cn(
-        "group relative flex items-start gap-3 py-3 px-3 rounded-lg transition-colors",
-        done ? "opacity-60 hover:opacity-80" : "hover:bg-muted/40",
+        "group relative flex items-start gap-3 py-3 px-3 rounded-lg overflow-hidden",
+        // Normal states
+        !isFlashing && !isAnimating && (done ? "opacity-60 hover:opacity-80" : "hover:bg-muted/40"),
+        !isFlashing && !isAnimating && "max-h-40 transition-colors duration-150",
+        // Flashing state - green highlight
+        isFlashing && !isAnimating && "bg-emerald-500/20 max-h-40 transition-colors duration-150",
+        // Animating state - collapse and fade
+        isAnimating && "bg-emerald-500/20 max-h-0 py-0 my-0 opacity-0 transition-all duration-300 ease-out",
       )}
     >
       {/* Checkbox */}
@@ -601,6 +611,8 @@ export default function TasksPage() {
   const [pulled, setPulled] = useState<Set<string>>(new Set())
   const [deleted, setDeleted] = useState<Set<string>>(new Set())
   const [sharedExtra, setSharedExtra] = useState<Record<string, string[]>>({})
+  const [flashingIds, setFlashingIds] = useState<Set<string>>(new Set())
+  const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set())
   const [showSuccess, setShowSuccess] = useState(false)
   const [emailTodo, setEmailTodo] = useState<Todo | null>(null)
   const [detailTodo, setDetailTodo] = useState<Todo | null>(null)
@@ -657,21 +669,53 @@ export default function TasksPage() {
 
   const allDoneToday = isToday && myPending.length === 0 && myAll.length > 0
 
-  // Toggle
+  // Toggle with animation
   const toggle = (id: string) => {
-    setCompletedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) { next.delete(id) } else {
-        next.add(id)
-        if (isToday && tab === "mine") {
-          const still = myPending.filter((t) => t.id !== id && !next.has(t.id))
-          if (still.length === 0 && myPending.length > 0) {
-            setTimeout(() => setShowSuccess(true), 400)
+    const wasCompleted = completedIds.has(id)
+
+    if (wasCompleted) {
+      // Uncompleting - just remove from completed, no animation
+      setCompletedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    } else {
+      // Completing - two phase animation:
+      // Phase 1: Flash green
+      setFlashingIds((prev) => new Set(prev).add(id))
+
+      // Phase 2: After flash, start collapse animation
+      setTimeout(() => {
+        setAnimatingIds((prev) => new Set(prev).add(id))
+      }, 150) // Brief green flash
+
+      // Phase 3: After collapse, clean up and mark complete
+      setTimeout(() => {
+        setFlashingIds((prev) => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
+        setAnimatingIds((prev) => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
+        setCompletedIds((prev) => {
+          const next = new Set(prev)
+          next.add(id)
+          // Check if all done for today
+          if (isToday && tab === "mine") {
+            const still = myPending.filter((t) => t.id !== id && !next.has(t.id))
+            if (still.length === 0 && myPending.length > 0) {
+              setTimeout(() => setShowSuccess(true), 200)
+            }
           }
-        }
-      }
-      return next
-    })
+          return next
+        })
+      }, 450) // Flash (150) + collapse animation (300)
+    }
   }
 
   const pull = (id: string) => setPulled((p) => new Set(p).add(id))
@@ -800,7 +844,7 @@ export default function TasksPage() {
                     <span className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">Overdue</span>
                     <Badge className="h-4 min-w-4 px-1 text-[10px] bg-amber-500/15 text-amber-600 dark:text-amber-400 border-0">{overdue.length}</Badge>
                   </div>
-                  <Card className="border-amber-500/20">
+                  <Card className="border-amber-500/20 py-2">
                     <CardContent className="p-1">
                       {overdue.map((t) => (
                         <TaskRow
@@ -810,6 +854,8 @@ export default function TasksPage() {
                           onDraft={t.type === "email" ? () => setEmailTodo(t) : undefined}
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          isFlashing={flashingIds.has(t.id)}
+                          isAnimating={animatingIds.has(t.id)}
                         />
                       ))}
                     </CardContent>
@@ -825,7 +871,7 @@ export default function TasksPage() {
                       {formatDateLabel(selectedDate)}
                     </p>
                   )}
-                  <Card>
+                  <Card className="py-2">
                     <CardContent className="p-1">
                       {dateTasks.map((t) => (
                         <TaskRow
@@ -837,6 +883,8 @@ export default function TasksPage() {
                           onPull={() => pull(t.id)}
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          isFlashing={flashingIds.has(t.id)}
+                          isAnimating={animatingIds.has(t.id)}
                         />
                       ))}
                     </CardContent>
@@ -851,7 +899,7 @@ export default function TasksPage() {
                     Completed
                     <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-0">{myDone.length}</Badge>
                   </p>
-                  <Card className="border-dashed">
+                  <Card className="border-dashed py-2">
                     <CardContent className="p-1">
                       {myDone.map((t) => (
                         <TaskRow
@@ -860,6 +908,8 @@ export default function TasksPage() {
                           onClick={() => setDetailTodo(t)}
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          isFlashing={flashingIds.has(t.id)}
+                          isAnimating={animatingIds.has(t.id)}
                         />
                       ))}
                     </CardContent>
@@ -884,7 +934,7 @@ export default function TasksPage() {
                     </span>
                     <button type="button" onClick={() => nav(1)} className="text-xs text-primary hover:underline">View</button>
                   </div>
-                  <Card className="border-dashed">
+                  <Card className="border-dashed py-2">
                     <CardContent className="p-1">
                       {tomorrowMy.slice(0, 3).map((t) => (
                         <TaskRow
@@ -896,6 +946,8 @@ export default function TasksPage() {
                           onPull={() => pull(t.id)}
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          isFlashing={flashingIds.has(t.id)}
+                          isAnimating={animatingIds.has(t.id)}
                         />
                       ))}
                       {tomorrowMy.length > 3 && (
@@ -917,7 +969,7 @@ export default function TasksPage() {
             <div className="space-y-5">
               {sharedPending.length > 0 && (
                 <section>
-                  <Card>
+                  <Card className="py-2">
                     <CardContent className="p-1">
                       {sharedPending.map((t) => (
                         <TaskRow
@@ -927,6 +979,8 @@ export default function TasksPage() {
                           variant="shared"
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          isFlashing={flashingIds.has(t.id)}
+                          isAnimating={animatingIds.has(t.id)}
                         />
                       ))}
                     </CardContent>
@@ -943,7 +997,7 @@ export default function TasksPage() {
                       {shared.filter((t) => t.completed).length}
                     </Badge>
                   </p>
-                  <Card className="border-dashed">
+                  <Card className="border-dashed py-2">
                     <CardContent className="p-1">
                       {shared.filter((t) => t.completed).map((t) => (
                         <TaskRow
@@ -953,6 +1007,8 @@ export default function TasksPage() {
                           variant="shared"
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          isFlashing={flashingIds.has(t.id)}
+                          isAnimating={animatingIds.has(t.id)}
                         />
                       ))}
                     </CardContent>
@@ -969,7 +1025,7 @@ export default function TasksPage() {
                     </span>
                     <button type="button" onClick={() => nav(1)} className="text-xs text-primary hover:underline">View</button>
                   </div>
-                  <Card className="border-dashed">
+                  <Card className="border-dashed py-2">
                     <CardContent className="p-1">
                       {tomorrowShared.map((t) => (
                         <TaskRow
@@ -981,6 +1037,8 @@ export default function TasksPage() {
                           onPull={() => pull(t.id)}
                           onDelete={() => del(t.id)}
                           onShare={(uid) => share(t.id, uid)}
+                          isFlashing={flashingIds.has(t.id)}
+                          isAnimating={animatingIds.has(t.id)}
                         />
                       ))}
                     </CardContent>
