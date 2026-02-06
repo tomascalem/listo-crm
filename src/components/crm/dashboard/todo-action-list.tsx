@@ -1,76 +1,101 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
-import { CheckSquare, Circle, CheckCircle2, Mail, Phone, FileText, ExternalLink, Clock } from "lucide-react"
+import {
+  CheckSquare,
+  Check,
+  Mail,
+  Phone,
+  FileText,
+  Calendar,
+  Clock,
+  Bot,
+} from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
   getTodosForUser,
   getVenueById,
   getContactById,
   type Todo,
 } from "@/lib/mock-data"
-import { LogActivityModal } from "@/components/crm/modals/log-activity-modal"
+import { cn } from "@/lib/utils"
 
 interface TodoActionListProps {
   userId: string
   limit?: number
 }
 
-const priorityConfig = {
-  high: { label: "High", color: "bg-destructive/20 text-destructive border-destructive/30" },
-  medium: { label: "Medium", color: "bg-warning/20 text-warning border-warning/30" },
-  low: { label: "Low", color: "bg-muted text-muted-foreground border-border" },
+const taskTypeConfig: Record<
+  Todo["type"],
+  { icon: typeof Mail; label: string; color: string }
+> = {
+  email: { icon: Mail, label: "Email", color: "text-sky-500" },
+  call: { icon: Phone, label: "Call", color: "text-emerald-500" },
+  meeting: { icon: Calendar, label: "Meeting", color: "text-violet-500" },
+  document: { icon: FileText, label: "Document", color: "text-amber-500" },
+  other: { icon: CheckSquare, label: "Task", color: "text-muted-foreground" },
 }
 
-function getDueStatus(dueDate: string): { label: string; isOverdue: boolean; isDueToday: boolean } {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const due = new Date(dueDate)
-  due.setHours(0, 0, 0, 0)
-
-  const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-
-  if (diffDays < 0) {
-    return { label: `${Math.abs(diffDays)}d overdue`, isOverdue: true, isDueToday: false }
-  } else if (diffDays === 0) {
-    return { label: "Due today", isOverdue: false, isDueToday: true }
-  } else if (diffDays === 1) {
-    return { label: "Due tomorrow", isOverdue: false, isDueToday: false }
-  } else {
-    return { label: `Due in ${diffDays}d`, isOverdue: false, isDueToday: false }
-  }
-}
-
-function getActionType(title: string): "email" | "call" | "proposal" | "general" {
-  const lowerTitle = title.toLowerCase()
-  if (lowerTitle.includes("email") || lowerTitle.includes("follow up") || lowerTitle.includes("send")) {
-    return "email"
-  }
-  if (lowerTitle.includes("call") || lowerTitle.includes("schedule")) {
-    return "call"
-  }
-  if (lowerTitle.includes("proposal") || lowerTitle.includes("document") || lowerTitle.includes("prepare")) {
-    return "proposal"
-  }
-  return "general"
+const sourceTypeIcons: Record<string, typeof Mail> = {
+  email: Mail,
+  call: Phone,
+  meeting: Calendar,
+  ai: Bot,
 }
 
 export function TodoActionList({ userId, limit = 5 }: TodoActionListProps) {
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
+  const [flashingIds, setFlashingIds] = useState<Set<string>>(new Set())
+  const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set())
+  const [enteringIds, setEnteringIds] = useState<Set<string>>(new Set())
+
   const allTodos = getTodosForUser(userId)
-  const todos = allTodos.filter((t) => !completedIds.has(t.id)).slice(0, limit)
+  const todos = allTodos
+    .filter((t) => !t.completed && !completedIds.has(t.id))
+    .slice(0, limit)
 
   const toggleComplete = (id: string) => {
-    setCompletedIds((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(id)) {
-        newSet.delete(id)
-      } else {
-        newSet.add(id)
+    // Find which task will enter when this one is removed
+    const visibleTodos = allTodos.filter((t) => !t.completed && !completedIds.has(t.id))
+    const nextTask = visibleTodos[limit] // The task that will slide into view
+
+    // Phase 1: Flash green
+    setFlashingIds((prev) => new Set(prev).add(id))
+
+    // Phase 2: After flash, start collapse animation
+    setTimeout(() => {
+      setAnimatingIds((prev) => new Set(prev).add(id))
+    }, 150)
+
+    // Phase 3: After collapse, clean up and mark complete
+    setTimeout(() => {
+      setFlashingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      setAnimatingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      // Mark the next task as entering (for fade-in animation)
+      if (nextTask) {
+        setEnteringIds((prev) => new Set(prev).add(nextTask.id))
       }
-      return newSet
-    })
+      setCompletedIds((prev) => new Set(prev).add(id))
+    }, 450)
+
+    // Phase 4: Clear entering animation after it completes
+    setTimeout(() => {
+      if (nextTask) {
+        setEnteringIds((prev) => {
+          const next = new Set(prev)
+          next.delete(nextTask.id)
+          return next
+        })
+      }
+    }, 750) // 450 + 300 for the enter animation
   }
 
   return (
@@ -82,132 +107,123 @@ export function TodoActionList({ userId, limit = 5 }: TodoActionListProps) {
             Your Tasks
           </CardTitle>
           <Link to="/tasks">
-            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground"
+            >
               View all
             </Button>
           </Link>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-3">
         {todos.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            <CheckCircle2 className="h-10 w-10 mx-auto mb-3 opacity-50 text-success" />
-            <p>All tasks completed!</p>
+            <div className="h-12 w-12 mx-auto mb-3 rounded-full bg-emerald-500/10 flex items-center justify-center">
+              <Check className="h-6 w-6 text-emerald-500" />
+            </div>
+            <p className="font-medium text-foreground">All tasks completed!</p>
             <p className="text-sm mt-1">Great work staying on top of things.</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {todos.map((todo) => {
+          <div className="space-y-0.5">
+            {todos.map((todo, index) => {
               const venue = todo.venueId ? getVenueById(todo.venueId) : null
-              const contact = todo.contactId ? getContactById(todo.contactId) : null
-              const dueStatus = getDueStatus(todo.dueDate)
-              const actionType = getActionType(todo.title)
-              const priorityStyle = priorityConfig[todo.priority]
+              const contact = todo.contactId
+                ? getContactById(todo.contactId)
+                : null
+              const cfg = taskTypeConfig[todo.type]
+              const Icon = cfg.icon
+              const SourceIcon = todo.source
+                ? sourceTypeIcons[todo.source.type]
+                : null
+              const isFlashing = flashingIds.has(todo.id)
+              const isAnimating = animatingIds.has(todo.id)
+              const isEntering = enteringIds.has(todo.id)
 
               return (
                 <div
                   key={todo.id}
-                  className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
-                    dueStatus.isOverdue
-                      ? "bg-destructive/5 border-destructive/30"
-                      : dueStatus.isDueToday
-                        ? "bg-warning/5 border-warning/30"
-                        : "bg-card border-border hover:bg-secondary/30"
-                  }`}
+                  className={cn(
+                    "group flex items-start gap-3 py-3 px-3 rounded-lg overflow-hidden transition-all duration-300 ease-out",
+                    !isFlashing && !isAnimating && !isEntering && "hover:bg-muted/40",
+                    isFlashing && !isAnimating && "bg-emerald-500/20",
+                    isAnimating && "bg-emerald-500/20 -translate-y-2 opacity-0 h-0 py-0 my-0",
+                    isEntering && "animate-fade-in-up"
+                  )}
                 >
                   {/* Checkbox */}
                   <button
+                    type="button"
                     onClick={() => toggleComplete(todo.id)}
-                    className="mt-0.5 text-muted-foreground hover:text-primary transition-colors"
-                  >
-                    {completedIds.has(todo.id) ? (
-                      <CheckCircle2 className="h-5 w-5 text-success" />
-                    ) : (
-                      <Circle className="h-5 w-5" />
-                    )}
-                  </button>
+                    aria-label="Mark as complete"
+                    className="mt-0.5 h-[18px] w-[18px] rounded-full border-[1.5px] border-muted-foreground/30 flex items-center justify-center shrink-0 transition-all cursor-pointer hover:border-emerald-400 hover:bg-emerald-500/10"
+                  />
 
-                  {/* Task Details */}
+                  {/* Icon */}
+                  <Icon className={cn("h-4 w-4 mt-0.5 shrink-0", cfg.color)} />
+
+                  {/* Content */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start gap-2">
-                      <h4 className="font-medium text-sm flex-1">{todo.title}</h4>
-                      <Badge
-                        variant="outline"
-                        className={`text-xs shrink-0 ${priorityStyle.color}`}
-                      >
-                        {priorityStyle.label}
-                      </Badge>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm leading-snug font-medium text-foreground truncate">
+                        {todo.title}
+                      </p>
+                      {todo.dueTime && (
+                        <span className="text-[11px] text-muted-foreground flex items-center gap-0.5 shrink-0">
+                          <Clock className="h-3 w-3" />
+                          {todo.dueTime}
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                       {venue && (
                         <Link
                           to={`/venues/${venue.id}`}
-                          className="hover:text-primary transition-colors"
+                          className="text-[11px] text-muted-foreground hover:text-primary transition-colors"
                         >
                           {venue.name}
                         </Link>
                       )}
-                      {venue && contact && <span>·</span>}
-                      {contact && <span>{contact.name}</span>}
-                    </div>
-                    <div className="flex items-center gap-1 mt-1">
-                      <Clock className={`h-3 w-3 ${dueStatus.isOverdue ? "text-destructive" : "text-muted-foreground"}`} />
-                      <span
-                        className={`text-xs ${
-                          dueStatus.isOverdue
-                            ? "text-destructive font-medium"
-                            : dueStatus.isDueToday
-                              ? "text-warning font-medium"
-                              : "text-muted-foreground"
-                        }`}
-                      >
-                        {dueStatus.label}
-                      </span>
+                      {contact && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {contact.name}
+                        </span>
+                      )}
+                      {todo.source && SourceIcon && (
+                        <span className="text-[11px] text-muted-foreground/70 flex items-center gap-1">
+                          {todo.source.type === "ai" ? (
+                            <Bot className="h-3 w-3" />
+                          ) : (
+                            <SourceIcon className="h-3 w-3" />
+                          )}
+                          {todo.source.label}
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {/* Action Button */}
-                  <div className="flex-shrink-0">
-                    {actionType === "email" && contact ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => window.open(`mailto:${contact.email}`, "_blank")}
-                      >
-                        <Mail className="h-3.5 w-3.5 mr-1.5" />
-                        Email
-                      </Button>
-                    ) : actionType === "call" && contact ? (
-                      <LogActivityModal
-                        trigger={
-                          <Button size="sm" variant="outline">
-                            <Phone className="h-3.5 w-3.5 mr-1.5" />
-                            Call
-                          </Button>
-                        }
-                        venueId={todo.venueId}
-                        contactId={todo.contactId}
-                      />
-                    ) : actionType === "proposal" && venue ? (
-                      <Link to={`/venues/${venue.id}`}>
-                        <Button size="sm" variant="outline">
-                          <FileText className="h-3.5 w-3.5 mr-1.5" />
-                          View
-                        </Button>
-                      </Link>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => toggleComplete(todo.id)}
-                      >
-                        Done
-                      </Button>
-                    )}
-                  </div>
+                  {/* Quick action on hover */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10"
+                    onClick={() => toggleComplete(todo.id)}
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1" />
+                    Done
+                  </Button>
                 </div>
               )
             })}
+            {/* Remaining count */}
+            {allTodos.filter((t) => !t.completed && !completedIds.has(t.id)).length > limit && (
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                +{allTodos.filter((t) => !t.completed && !completedIds.has(t.id)).length - limit} more tasks remaining
+              </div>
+            )}
           </div>
         )}
       </CardContent>

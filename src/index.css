@@ -211,6 +211,22 @@
   display: none;
 }
 
+/* Fade in from below animation */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 300ms ease-out forwards;
+}
+
 /* Text truncation */
 .line-clamp-2 {
   display: -webkit-box;
