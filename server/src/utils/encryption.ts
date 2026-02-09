@@ -43,7 +43,7 @@ export function decryptToken(ciphertext: string): string {
     throw new Error('Invalid ciphertext format');
   }
 
-  const [ivHex, tagHex, encrypted] = parts;
+  const [ivHex, tagHex, encrypted] = parts as [string, string, string];
   const iv = Buffer.from(ivHex, 'hex');
   const tag = Buffer.from(tagHex, 'hex');
 

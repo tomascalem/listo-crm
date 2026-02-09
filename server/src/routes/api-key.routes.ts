@@ -1,8 +1,8 @@
-import { Router } from 'express';
+import { Router, type Router as RouterType } from 'express';
 import { apiKeyController } from '../controllers/api-key.controller.js';
 import { authenticate } from '../middleware/auth.js';
 
-const router = Router();
+const router: RouterType = Router();
 
 // All routes require authentication
 router.use(authenticate);

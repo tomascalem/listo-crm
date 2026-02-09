@@ -24,16 +24,17 @@ export const googleController = {
    * GET /google/auth-url
    * Get the OAuth consent URL
    */
-  async getAuthUrl(req: Request, res: Response, next: NextFunction) {
+  async getAuthUrl(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.user!.id;
 
       // Check if Google credentials are configured
       if (!config.google.clientId || !config.google.clientSecret) {
-        return res.status(503).json({
+        res.status(503).json({
           success: false,
           error: 'Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.',
         });
+        return;
       }
 
       // Generate secure state token
@@ -155,15 +156,16 @@ export const googleController = {
    * GET /google/gmail/thread-status
    * Check if a Gmail thread has been imported to CRM
    */
-  async getThreadStatus(req: Request, res: Response, next: NextFunction) {
+  async getThreadStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { threadId } = req.query as { threadId: string };
+      const threadId = req.query.threadId as string | undefined;
 
       if (!threadId) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           error: 'threadId is required',
         });
+        return;
       }
 
       const status = await gmailAddonService.getThreadStatus(req.user!.id, threadId);
@@ -177,15 +179,16 @@ export const googleController = {
    * POST /google/gmail/import-thread
    * Import a Gmail thread into CRM
    */
-  async importThread(req: Request, res: Response, next: NextFunction) {
+  async importThread(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { threadId, subject, messages, participants, contactId } = req.body;
 
       if (!threadId || !messages || !Array.isArray(messages)) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           error: 'threadId and messages array are required',
         });
+        return;
       }
 
       const result = await gmailAddonService.importThread(
@@ -204,15 +207,16 @@ export const googleController = {
    * DELETE /google/gmail/thread/:threadId
    * Remove a Gmail thread from CRM
    */
-  async removeThread(req: Request, res: Response, next: NextFunction) {
+  async removeThread(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { threadId } = req.params;
+      const threadId = req.params.threadId as string | undefined;
 
       if (!threadId) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           error: 'threadId is required',
         });
+        return;
       }
 
       const result = await gmailAddonService.removeThread(req.user!.id, threadId);

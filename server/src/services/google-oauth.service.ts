@@ -24,7 +24,7 @@ export const googleOAuthService = {
     const oauth2Client = this.createOAuth2Client();
     return oauth2Client.generateAuthUrl({
       access_type: 'offline',
-      scope: config.google.scopes,
+      scope: [...config.google.scopes],
       state,
       prompt: 'consent', // Force consent to ensure we get refresh token
     });

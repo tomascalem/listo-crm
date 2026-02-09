@@ -20,15 +20,16 @@ export const apiKeyController = {
    * POST /api-keys
    * Generate a new API key
    */
-  async createKey(req: Request, res: Response, next: NextFunction) {
+  async createKey(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { name, expiresInDays } = req.body;
 
       if (!name) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           error: 'Name is required',
         });
+        return;
       }
 
       // Calculate expiration date if specified
@@ -53,7 +54,7 @@ export const apiKeyController = {
    */
   async revokeKey(req: Request, res: Response, next: NextFunction) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await apiKeyService.revokeKey(req.user!.id, id);
       res.json(successResponse(result));
     } catch (error) {
@@ -67,7 +68,7 @@ export const apiKeyController = {
    */
   async deleteKey(req: Request, res: Response, next: NextFunction) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await apiKeyService.deleteKey(req.user!.id, id);
       res.json(successResponse(result));
     } catch (error) {

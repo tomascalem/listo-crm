@@ -121,7 +121,7 @@ export const gmailAddonService = {
       });
 
       if (matchedContact && matchedContact.venues.length > 0) {
-        matchedVenue = matchedContact.venues[0].venue;
+        matchedVenue = matchedContact.venues[0]!.venue;
       }
     } else {
       // Try to auto-match from participants
@@ -142,7 +142,7 @@ export const gmailAddonService = {
 
         if (contact && contact.venues.length > 0) {
           matchedContact = contact;
-          matchedVenue = contact.venues[0].venue;
+          matchedVenue = contact.venues[0]!.venue;
           break;
         }
       }
