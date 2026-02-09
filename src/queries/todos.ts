@@ -47,11 +47,7 @@ export function useTodos(filters?: {
 export function useUsers() {
   return useQuery({
     queryKey: ['users'],
-    queryFn: async () => {
-      const response = await usersApi.list()
-      // Handle both paginated response and direct array
-      return response.items || response || []
-    },
+    queryFn: () => usersApi.list(),
   })
 }
 

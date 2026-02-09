@@ -11,10 +11,7 @@ export const userKeys = {
 export function useUsers() {
   return useQuery({
     queryKey: userKeys.lists(),
-    queryFn: async () => {
-      const response = await usersApi.list()
-      return response.items
-    },
+    queryFn: () => usersApi.list(),
   })
 }
 

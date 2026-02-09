@@ -575,7 +575,8 @@ export const searchApi = {
 // Users API
 export const usersApi = {
   async list() {
-    return apiFetch<PaginatedResponse<any>>('/users');
+    // Users endpoint returns array directly (not paginated)
+    return apiFetch<any[]>('/users');
   },
 
   async getById(id: string) {
