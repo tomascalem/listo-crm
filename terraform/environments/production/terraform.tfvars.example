@@ -1,0 +1,35 @@
+# =============================================================================
+# Listo CRM - Production Terraform Variables
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your values
+# NEVER commit terraform.tfvars to version control!
+# =============================================================================
+
+# AWS Configuration
+aws_region  = "us-east-1"
+environment = "production"
+
+# Database
+db_instance_class    = "db.t3.small"
+db_allocated_storage = 20
+db_multi_az          = false
+
+# Redis
+redis_node_type = "cache.t3.micro"
+
+# ECS
+ecs_desired_count = 2
+ecs_cpu           = 512
+ecs_memory        = 1024
+ecs_min_capacity  = 2
+ecs_max_capacity  = 10
+
+# Secrets - REPLACE THESE WITH YOUR ACTUAL VALUES
+jwt_secret           = "your-secure-jwt-secret-here"
+google_client_id     = "your-google-client-id.apps.googleusercontent.com"
+google_client_secret = "your-google-client-secret"
+token_encryption_key = "generate-with-openssl-rand-hex-32"
+
+# GitHub (for CI/CD OIDC)
+github_org  = "your-github-username-or-org"
+github_repo = "listo-crm"
