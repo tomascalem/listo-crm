@@ -1,5 +1,4 @@
-
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Dialog,
@@ -16,7 +15,11 @@ import {
   Clock,
   Star,
 } from "lucide-react"
-import { venues, contacts, operators, concessionaires, getOperatorById, type Venue, type Contact, type Operator, type Concessionaire } from "@/lib/mock-data"
+import { useVenues } from "@/queries/venues"
+import { useContacts } from "@/queries/contacts"
+import { useOperators } from "@/queries/operators"
+import { useConcessionaires } from "@/queries/concessionaires"
+import type { Venue, Contact, Operator, Concessionaire } from "@/lib/mock-data"
 
 interface SearchResult {
   type: "venue" | "contact" | "operator" | "concessionaire"
@@ -29,6 +32,19 @@ export function GlobalSearch() {
   const [results, setResults] = useState<SearchResult[]>([])
   const [recentSearches, setRecentSearches] = useState<SearchResult[]>([])
   const navigate = useNavigate()
+
+  // Fetch all data for search
+  const { data: venues = [] } = useVenues()
+  const { data: contacts = [] } = useContacts()
+  const { data: operators = [] } = useOperators()
+  const { data: concessionaires = [] } = useConcessionaires()
+
+  // Create operator lookup map
+  const operatorMap = useMemo(() => {
+    const map = new Map<string, any>()
+    operators.forEach((op: any) => map.set(op.id, op))
+    return map
+  }, [operators])
 
   // Keyboard shortcut to open search
   useEffect(() => {
@@ -53,7 +69,7 @@ export function GlobalSearch() {
     const searchResults: SearchResult[] = []
 
     // Search venues
-    venues.forEach((venue) => {
+    venues.forEach((venue: any) => {
       if (
         venue.name.toLowerCase().includes(q) ||
         venue.city.toLowerCase().includes(q) ||
@@ -64,7 +80,7 @@ export function GlobalSearch() {
     })
 
     // Search operators
-    operators.forEach((operator) => {
+    operators.forEach((operator: any) => {
       if (
         operator.name.toLowerCase().includes(q) ||
         operator.description?.toLowerCase().includes(q)
@@ -74,7 +90,7 @@ export function GlobalSearch() {
     })
 
     // Search concessionaires
-    concessionaires.forEach((concessionaire) => {
+    concessionaires.forEach((concessionaire: any) => {
       if (
         concessionaire.name.toLowerCase().includes(q) ||
         concessionaire.description?.toLowerCase().includes(q)
@@ -84,7 +100,7 @@ export function GlobalSearch() {
     })
 
     // Search contacts
-    contacts.forEach((contact) => {
+    contacts.forEach((contact: any) => {
       if (
         contact.name.toLowerCase().includes(q) ||
         contact.email.toLowerCase().includes(q) ||
@@ -95,7 +111,7 @@ export function GlobalSearch() {
     })
 
     setResults(searchResults.slice(0, 10))
-  }, [])
+  }, [venues, operators, concessionaires, contacts])
 
   useEffect(() => {
     const timeoutId = setTimeout(() => search(query), 150)
@@ -174,7 +190,7 @@ export function GlobalSearch() {
     switch (result.type) {
       case "venue":
         const venue = result.item as Venue
-        const operator = getOperatorById(venue.operatorId)
+        const operator = (venue as any).operator || operatorMap.get(venue.operatorId)
         return `${venue.type} · ${venue.city}, ${venue.state}${operator ? ` · ${operator.name}` : ''}`
       case "operator":
         return (result.item as Operator).description || "Operator"

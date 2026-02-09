@@ -1,4 +1,3 @@
-
 import { Mail, Phone, Linkedin, MoreHorizontal, Plus, Star, Building2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,7 +9,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { getVenueById } from "@/lib/mock-data"
 import type { Contact } from "@/lib/mock-data"
 
 interface ContactsListProps {
@@ -19,7 +17,8 @@ interface ContactsListProps {
 }
 
 function ContactCard({ contact }: { contact: Contact }) {
-  const venues = contact.venueIds.map((id) => getVenueById(id)).filter(Boolean)
+  // Use expanded venues from API if available, otherwise empty array
+  const venues = (contact as any).venues || []
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 transition-colors hover:bg-secondary/30">
@@ -93,7 +92,7 @@ function ContactCard({ contact }: { contact: Contact }) {
             <span>Associated venues</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {venues.map((venue) => venue && (
+            {venues.map((venue: any) => venue && (
               <Badge key={venue.id} variant="secondary" className="text-xs">
                 {venue.name}
               </Badge>

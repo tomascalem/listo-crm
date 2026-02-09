@@ -22,7 +22,9 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Phone, Video, Mail, Users, FileText, Upload } from "lucide-react"
-import { venues, contacts } from "@/lib/mock-data"
+import { useVenues } from "@/queries/venues"
+import { useContacts } from "@/queries/contacts"
+import { useCreateInteraction } from "@/queries/interactions"
 
 interface LogActivityModalProps {
   trigger?: React.ReactNode
@@ -40,18 +42,43 @@ const activityTypes = [
 
 export function LogActivityModal({ trigger, venueId, contactId }: LogActivityModalProps) {
   const [open, setOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [activityType, setActivityType] = useState<string>("call")
+  const [selectedVenueId, setSelectedVenueId] = useState(venueId || "")
+  const [selectedContactId, setSelectedContactId] = useState(contactId || "")
+  const [summary, setSummary] = useState("")
   const [highlights, setHighlights] = useState<string[]>([""])
   const [wants, setWants] = useState<string[]>([""])
   const [concerns, setConcerns] = useState<string[]>([""])
+  const { data: venues = [] } = useVenues()
+  const { data: contacts = [] } = useContacts()
+  const createInteraction = useCreateInteraction()
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsSubmitting(false)
-    setOpen(false)
+    try {
+      await createInteraction.mutateAsync({
+        type: activityType as "call" | "video" | "email" | "meeting" | "note",
+        date: new Date().toISOString(),
+        summary,
+        highlights: highlights.filter(h => h.trim() !== ""),
+        wants: wants.filter(w => w.trim() !== ""),
+        concerns: concerns.filter(c => c.trim() !== ""),
+        venueId: selectedVenueId,
+        contactId: selectedContactId,
+        userId: "user-1", // Would come from auth context
+      })
+      // Reset form
+      setActivityType("call")
+      setSelectedVenueId(venueId || "")
+      setSelectedContactId(contactId || "")
+      setSummary("")
+      setHighlights([""])
+      setWants([""])
+      setConcerns([""])
+      setOpen(false)
+    } catch (error) {
+      console.error("Failed to create interaction:", error)
+    }
   }
 
   const addHighlight = () => setHighlights([...highlights, ""])
@@ -122,12 +149,12 @@ export function LogActivityModal({ trigger, venueId, contactId }: LogActivityMod
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="activity-venue">Venue *</Label>
-              <Select defaultValue={venueId}>
+              <Select value={selectedVenueId} onValueChange={setSelectedVenueId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select venue" />
                 </SelectTrigger>
                 <SelectContent>
-                  {venues.map((venue) => (
+                  {venues.map((venue: any) => (
                     <SelectItem key={venue.id} value={venue.id}>
                       {venue.name}
                     </SelectItem>
@@ -137,12 +164,12 @@ export function LogActivityModal({ trigger, venueId, contactId }: LogActivityMod
             </div>
             <div className="space-y-2">
               <Label htmlFor="activity-contact">Contact *</Label>
-              <Select defaultValue={contactId}>
+              <Select value={selectedContactId} onValueChange={setSelectedContactId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select contact" />
                 </SelectTrigger>
                 <SelectContent>
-                  {contacts.map((contact) => (
+                  {contacts.map((contact: any) => (
                     <SelectItem key={contact.id} value={contact.id}>
                       {contact.name} - {contact.role}
                     </SelectItem>
@@ -171,6 +198,8 @@ export function LogActivityModal({ trigger, venueId, contactId }: LogActivityMod
               id="activity-summary"
               placeholder="Brief summary of the interaction..."
               className="min-h-[80px]"
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
               required
             />
           </div>
@@ -266,8 +295,8 @@ export function LogActivityModal({ trigger, venueId, contactId }: LogActivityMod
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting} className="bg-primary text-primary-foreground hover:bg-primary/90">
-              {isSubmitting ? "Saving..." : "Save Activity"}
+            <Button type="submit" disabled={createInteraction.isPending} className="bg-primary text-primary-foreground hover:bg-primary/90">
+              {createInteraction.isPending ? "Saving..." : "Save Activity"}
             </Button>
           </div>
         </form>

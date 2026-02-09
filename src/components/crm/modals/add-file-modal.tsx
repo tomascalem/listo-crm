@@ -22,11 +22,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { File, FolderOpen, Building2, MapPin } from "lucide-react"
-import {
-  getVenuesByOperatorId,
-  getVenuesByConcessionaireId,
-  type FileType,
-} from "@/lib/mock-data"
+import { useVenues } from "@/queries/venues"
+import { useCreateFile } from "@/queries/files"
+import { type FileType } from "@/lib/mock-data"
 
 interface AddFileModalProps {
   trigger?: React.ReactNode
@@ -45,27 +43,50 @@ const fileTypes: { value: FileType; label: string }[] = [
 
 export function AddFileModal({ trigger, entityType, entityId, entityName }: AddFileModalProps) {
   const [open, setOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [name, setName] = useState("")
+  const [fileType, setFileType] = useState<FileType | "">("")
+  const [fileDate, setFileDate] = useState(new Date().toISOString().split('T')[0])
+  const [url, setUrl] = useState("")
+  const [description, setDescription] = useState("")
   const [applyToAll, setApplyToAll] = useState(true)
   const [selectedVenues, setSelectedVenues] = useState<string[]>([])
 
+  const { data: allVenues = [] } = useVenues()
+  const createFile = useCreateFile()
+
   // Get venues for operator/concessionaire
   const venues = entityType === "operator"
-    ? getVenuesByOperatorId(entityId)
+    ? allVenues.filter((v: any) => v.operatorId === entityId)
     : entityType === "concessionaire"
-    ? getVenuesByConcessionaireId(entityId)
+    ? allVenues.filter((v: any) => v.concessionaires?.some((c: any) => c.id === entityId))
     : []
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsSubmitting(false)
-    setOpen(false)
-    // Reset form
-    setApplyToAll(true)
-    setSelectedVenues([])
+    try {
+      await createFile.mutateAsync({
+        name,
+        type: fileType,
+        entityType,
+        entityId,
+        date: fileDate,
+        url: url || undefined,
+        description: description || undefined,
+        isInheritable: applyToAll,
+        venueIds: !applyToAll && selectedVenues.length > 0 ? selectedVenues : undefined,
+      })
+      // Reset form
+      setName("")
+      setFileType("")
+      setFileDate(new Date().toISOString().split('T')[0])
+      setUrl("")
+      setDescription("")
+      setApplyToAll(true)
+      setSelectedVenues([])
+      setOpen(false)
+    } catch (error) {
+      console.error("Failed to create file:", error)
+    }
   }
 
   const toggleVenue = (venueId: string) => {
@@ -105,6 +126,8 @@ export function AddFileModal({ trigger, entityType, entityId, entityName }: AddF
             <Input
               id="file-name"
               placeholder="e.g., Q4 2024 Sales Deck"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               required
             />
           </div>
@@ -113,7 +136,7 @@ export function AddFileModal({ trigger, entityType, entityId, entityName }: AddF
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="file-type">File Type *</Label>
-              <Select required>
+              <Select value={fileType} onValueChange={(v) => setFileType(v as FileType)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
@@ -131,8 +154,9 @@ export function AddFileModal({ trigger, entityType, entityId, entityName }: AddF
               <Input
                 id="file-date"
                 type="date"
+                value={fileDate}
+                onChange={(e) => setFileDate(e.target.value)}
                 required
-                defaultValue={new Date().toISOString().split('T')[0]}
               />
             </div>
           </div>
@@ -144,6 +168,8 @@ export function AddFileModal({ trigger, entityType, entityId, entityName }: AddF
               id="file-url"
               type="url"
               placeholder="https://drive.google.com/file/d/..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
               Link to the file in Google Drive, Dropbox, etc.
@@ -157,6 +183,8 @@ export function AddFileModal({ trigger, entityType, entityId, entityName }: AddF
               id="file-description"
               placeholder="Brief description of the file contents..."
               className="min-h-[80px]"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
             />
           </div>
 
@@ -186,7 +214,7 @@ export function AddFileModal({ trigger, entityType, entityId, entityName }: AddF
                 <div className="space-y-3">
                   <Label className="text-sm">Select venues:</Label>
                   <div className="max-h-[200px] overflow-y-auto space-y-2 rounded-md border border-border p-3 bg-card">
-                    {venues.map((venue) => (
+                    {venues.map((venue: any) => (
                       <div
                         key={venue.id}
                         className="flex items-center gap-3 p-2 rounded-md hover:bg-secondary/50 transition-colors"
@@ -225,8 +253,8 @@ export function AddFileModal({ trigger, entityType, entityId, entityName }: AddF
             <Button type="button" variant="outline" onClick={() => setOpen(false)} className="bg-transparent">
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Adding..." : "Add File"}
+            <Button type="submit" disabled={createFile.isPending}>
+              {createFile.isPending ? "Adding..." : "Add File"}
             </Button>
           </div>
         </form>

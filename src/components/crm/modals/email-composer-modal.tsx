@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Mail, Send, ExternalLink, Sparkles, User } from "lucide-react"
-import { getContactById, getVenueById } from "@/lib/mock-data"
+import { useContact } from "@/queries/contacts"
+import { useVenue } from "@/queries/venues"
 
 interface EmailComposerModalProps {
   trigger: React.ReactNode
@@ -37,8 +38,8 @@ export function EmailComposerModal({
   const [subject, setSubject] = useState(initialSubject)
   const [body, setBody] = useState(initialBody)
 
-  const contact = getContactById(contactId)
-  const venue = getVenueById(venueId)
+  const { data: contact } = useContact(contactId)
+  const { data: venue } = useVenue(venueId)
 
   // Reset form when modal opens with new content
   useEffect(() => {
@@ -99,7 +100,7 @@ export function EmailComposerModal({
               <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-medium">
                 {contact.name
                   .split(" ")
-                  .map((n) => n[0])
+                  .map((n: string) => n[0])
                   .join("")}
               </div>
               <div className="flex-1">

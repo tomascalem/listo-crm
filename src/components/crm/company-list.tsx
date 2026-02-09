@@ -1,6 +1,5 @@
-
 import { Link } from "react-router-dom"
-import { Building2, MapPin, MoreHorizontal, ChefHat, Users } from "lucide-react"
+import { Building2, MapPin, MoreHorizontal, ChefHat, Users, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import { venues, getOperatorById, getConcessionaireById } from "@/lib/mock-data"
+import { useVenues } from "@/queries/venues"
 import type { VenueStatus, VenueStage } from "@/lib/mock-data"
 
 const statusConfig: Record<VenueStatus, { label: string; className: string }> = {
@@ -61,10 +60,20 @@ function formatDate(dateStr: string) {
 }
 
 export function CompanyList() {
+  const { data: venues = [], isLoading } = useVenues()
+
   // Show most recently active venues
   const recentVenues = [...venues]
-    .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
+    .sort((a: any, b: any) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
     .slice(0, 6)
+
+  if (isLoading) {
+    return (
+      <div className="rounded-lg border border-border bg-card flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -81,11 +90,12 @@ export function CompanyList() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {recentVenues.map((venue) => {
-            const operator = getOperatorById(venue.operatorId)
-            const venueConcessionaires = venue.concessionaireIds.map(id => getConcessionaireById(id)).filter(Boolean)
-            const status = statusConfig[venue.status]
-            const stage = stageConfig[venue.stage]
+          {recentVenues.map((venue: any) => {
+            // Use expanded relations from API
+            const operator = venue.operator || null
+            const venueConcessionaires = venue.concessionaires || []
+            const status = statusConfig[venue.status as VenueStatus] || statusConfig.prospect
+            const stage = stageConfig[venue.stage as VenueStage] || stageConfig.lead
             
             return (
               <TableRow key={venue.id} className="border-border group">
@@ -121,7 +131,7 @@ export function CompanyList() {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
-                    {venueConcessionaires.slice(0, 2).map((con) => con && (
+                    {venueConcessionaires.slice(0, 2).map((con: any) => con && (
                       <Link key={con.id} to={`/concessionaires/${con.id}`}>
                         <Badge variant="outline" className="text-xs hover:bg-primary/10 hover:text-primary transition-colors">
                           {con.name.split(' ')[0]}

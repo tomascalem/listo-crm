@@ -17,7 +17,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
-import { getContactsByVenueId, getInteractionsByVenueId, getTodosByVenueId } from "@/lib/mock-data"
 import type { Venue, VenueStage } from "@/lib/mock-data"
 
 interface VenuesListProps {
@@ -48,10 +47,11 @@ function formatDate(dateStr: string) {
 
 function VenueCard({ venue }: { venue: Venue }) {
   const [isOpen, setIsOpen] = useState(false)
-  const contacts = getContactsByVenueId(venue.id)
-  const interactions = getInteractionsByVenueId(venue.id)
-  const todos = getTodosByVenueId(venue.id)
-  const stage = stageConfig[venue.stage]
+  // Use expanded relations from API if available
+  const contacts = (venue as any).contacts || []
+  const interactions = (venue as any).interactions || []
+  const todos = (venue as any).todos || []
+  const stage = stageConfig[venue.stage] || stageConfig.lead
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -124,7 +124,7 @@ function VenueCard({ venue }: { venue: Venue }) {
                   <span>Open Tasks</span>
                 </div>
                 <p className="mt-1 font-semibold text-card-foreground">
-                  {todos.filter(t => !t.completed).length}
+                  {todos.filter((t: any) => !t.completed).length}
                 </p>
               </div>
             </div>
@@ -134,7 +134,7 @@ function VenueCard({ venue }: { venue: Venue }) {
               <div>
                 <h4 className="text-sm font-medium text-card-foreground mb-2">Key Contacts</h4>
                 <div className="flex flex-wrap gap-2">
-                  {contacts.map((contact) => (
+                  {contacts.map((contact: any) => (
                     <div
                       key={contact.id}
                       className="flex items-center gap-2 rounded-lg bg-card px-3 py-1.5 text-sm"

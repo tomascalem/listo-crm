@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Link } from "react-router-dom"
 import { Sidebar } from "@/components/crm/sidebar"
 import { Button } from "@/components/ui/button"
@@ -50,18 +50,40 @@ import {
   Search,
   Bot,
   Clock,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import {
-  todos as initialTodos,
-  getVenueById,
-  getContactById,
-  getUserById,
-  users,
-} from "@/lib/mock-data"
+import { useTodos } from "@/queries/todos"
+import { useUsers } from "@/queries/users"
 import { AddTaskModal } from "@/components/crm/modals/add-task-modal"
-import type { Todo, TaskType } from "@/lib/mock-data"
 import confetti from "canvas-confetti"
+
+type TaskType = "email" | "call" | "meeting" | "document" | "follow-up" | "other"
+
+interface Todo {
+  id: string
+  title: string
+  description?: string
+  type: TaskType
+  priority: "high" | "medium" | "low"
+  dueDate: string
+  dueTime?: string
+  completed: boolean
+  assignedTo: string
+  createdBy: string
+  venueId?: string
+  contactId?: string
+  sharedWith?: string[]
+  source?: {
+    type: "email" | "call" | "meeting" | "ai" | "manual"
+    label: string
+    interactionId?: string
+  }
+  venue?: any
+  contact?: any
+  assignee?: any
+  creator?: any
+}
 
 const taskTypeConfig: Record<TaskType, { icon: typeof Mail; label: string; color: string }> = {
   email: { icon: Mail, label: "Email", color: "text-sky-600 dark:text-sky-400" },
@@ -104,11 +126,15 @@ function TeamMemberPopover({
   sharedUsers,
   onShare,
   onRemoveShare,
+  users = [],
+  getUserById,
 }: {
   todo: Todo
-  sharedUsers: ReturnType<typeof getUserById>[]
+  sharedUsers: any[]
   onShare?: (userId: string) => void
   onRemoveShare?: (userId: string) => void
+  users?: any[]
+  getUserById: (id: string) => any
 }) {
   const [search, setSearch] = useState("")
   const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set())
@@ -117,9 +143,9 @@ function TeamMemberPopover({
   const sharedUserIds = new Set(todo.sharedWith ?? [])
 
   // All team members except owner, sorted: added first, then available
-  const allTeamMembers = users.filter((u) => u.id !== todo.assignedTo)
+  const allTeamMembers = users.filter((u: any) => u.id !== todo.assignedTo)
   const filteredMembers = allTeamMembers.filter(
-    (u) => u.name.toLowerCase().includes(search.toLowerCase()) ||
+    (u: any) => u.name.toLowerCase().includes(search.toLowerCase()) ||
            u.email.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -290,6 +316,8 @@ function TaskRow({
   variant = "own",
   isFlashing = false,
   isAnimating = false,
+  users = [],
+  getUserById,
 }: {
   todo: Todo
   done: boolean
@@ -304,13 +332,15 @@ function TaskRow({
   variant?: "own" | "shared"
   isFlashing?: boolean
   isAnimating?: boolean
+  users?: any[]
+  getUserById: (id: string) => any
 }) {
-  const venue = todo.venueId ? getVenueById(todo.venueId) : null
-  const contact = todo.contactId ? getContactById(todo.contactId) : null
-  const cfg = taskTypeConfig[todo.type]
+  const venue = todo.venue
+  const contact = todo.contact
+  const cfg = taskTypeConfig[todo.type] || taskTypeConfig.other
   const Icon = cfg.icon
   const assignee = variant === "shared" ? getUserById(todo.assignedTo) : null
-  const sharedUsers = todo.sharedWith?.map(getUserById).filter(Boolean) ?? []
+  const sharedUsers = todo.sharedWith?.map((id: string) => getUserById(id)).filter(Boolean) ?? []
   const SourceIcon = todo.source ? sourceTypeIcons[todo.source.type] : null
 
   return (
@@ -425,6 +455,8 @@ function TaskRow({
           sharedUsers={sharedUsers}
           onShare={onShare}
           onRemoveShare={onRemoveShare}
+          users={users}
+          getUserById={getUserById}
         />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -480,18 +512,20 @@ function TaskDetail({
   onToggle,
   onDraft,
   done,
+  getUserById,
 }: {
   todo: Todo
   onClose: () => void
   onToggle: () => void
   onDraft: () => void
   done: boolean
+  getUserById: (id: string) => any
 }) {
-  const venue = todo.venueId ? getVenueById(todo.venueId) : null
-  const contact = todo.contactId ? getContactById(todo.contactId) : null
-  const cfg = taskTypeConfig[todo.type]
+  const venue = todo.venue
+  const contact = todo.contact
+  const cfg = taskTypeConfig[todo.type] || taskTypeConfig.other
   const Icon = cfg.icon
-  const sharedUsers = todo.sharedWith?.map(getUserById).filter(Boolean) ?? []
+  const sharedUsers = todo.sharedWith?.map((id: string) => getUserById(id)).filter(Boolean) ?? []
   const creator = getUserById(todo.createdBy)
   const SourceIcon = todo.source ? sourceTypeIcons[todo.source.type] : null
 
@@ -644,8 +678,8 @@ function TaskDetail({
 /*  Email Draft Modal                                                 */
 /* ------------------------------------------------------------------ */
 function EmailDraftModal({ open, onClose, todo }: { open: boolean; onClose: () => void; todo: Todo | null }) {
-  const contact = todo?.contactId ? getContactById(todo.contactId) : null
-  const venue = todo?.venueId ? getVenueById(todo.venueId) : null
+  const contact = todo?.contact
+  const venue = todo?.venue
   const [copied, setCopied] = useState(false)
 
   const generateDraft = useCallback(() => {
@@ -786,11 +820,18 @@ export default function TasksPage() {
   const now = new Date()
   now.setHours(0, 0, 0, 0)
 
+  // Fetch data from API
+  const { data: allTodos = [], isLoading: todosLoading } = useTodos()
+  const { data: users = [] } = useUsers()
+
+  // Helper to get user by ID
+  const getUserById = useCallback((id: string) => {
+    return users.find((u: any) => u.id === id)
+  }, [users])
+
   const [tab, setTab] = useState<"mine" | "shared">("mine")
   const [selectedDate, setSelectedDate] = useState(now)
-  const [completedIds, setCompletedIds] = useState<Set<string>>(
-    () => new Set(initialTodos.filter((t) => t.completed).map((t) => t.id)),
-  )
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
   const [pulled, setPulled] = useState<Set<string>>(new Set())
   const [deleted, setDeleted] = useState<Set<string>>(new Set())
   const [sharedExtra, setSharedExtra] = useState<Record<string, string[]>>({})
@@ -800,54 +841,73 @@ export default function TasksPage() {
   const [emailTodo, setEmailTodo] = useState<Todo | null>(null)
   const [detailTodo, setDetailTodo] = useState<Todo | null>(null)
 
+  // Initialize completedIds from API data
+  useEffect(() => {
+    if (allTodos.length > 0) {
+      setCompletedIds(new Set(allTodos.filter((t: any) => t.completed).map((t: any) => t.id)))
+    }
+  }, [allTodos])
+
   const isToday = selectedDate.toDateString() === now.toDateString()
   const isFuture = selectedDate.getTime() > now.getTime()
   const tomorrow = new Date(now)
   tomorrow.setDate(tomorrow.getDate() + 1)
 
   // Build effective todo list
-  const effectiveTodos = initialTodos
-    .filter((t) => !deleted.has(t.id))
-    .map((t) => ({
+  const effectiveTodos = useMemo(() => allTodos
+    .filter((t: any) => !deleted.has(t.id))
+    .map((t: any) => ({
       ...t,
       completed: completedIds.has(t.id),
       dueDate: pulled.has(t.id) ? now.toISOString().split("T")[0] : t.dueDate,
       sharedWith: [...(t.sharedWith ?? []), ...(sharedExtra[t.id] ?? [])],
-    }))
+    })), [allTodos, deleted, completedIds, pulled, sharedExtra, now])
 
   const forDate = (date: Date, includeOverdue: boolean) =>
-    effectiveTodos.filter((t) => {
+    effectiveTodos.filter((t: any) => {
       const d = new Date(t.dueDate + "T12:00:00")
       d.setHours(0, 0, 0, 0)
       if (includeOverdue && date.getTime() === now.getTime()) return d <= date
       return d.toDateString() === date.toDateString()
     })
 
+  // Loading state
+  if (todosLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Sidebar />
+        <main className="pl-64 flex items-center justify-center min-h-screen">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </main>
+      </div>
+    )
+  }
+
   // My tasks for current date
-  const myAll = forDate(selectedDate, isToday).filter((t) => t.assignedTo === userId)
-  const myPending = myAll.filter((t) => !t.completed)
-  const myDone = myAll.filter((t) => t.completed)
+  const myAll = forDate(selectedDate, isToday).filter((t: any) => t.assignedTo === userId)
+  const myPending = myAll.filter((t: any) => !t.completed)
+  const myDone = myAll.filter((t: any) => t.completed)
   const overdue = isToday
-    ? myPending.filter((t) => {
+    ? myPending.filter((t: any) => {
         const d = new Date(t.dueDate + "T12:00:00"); d.setHours(0, 0, 0, 0)
         return d < now
       })
     : []
-  const dateTasks = myPending.filter((t) => {
+  const dateTasks = myPending.filter((t: any) => {
     const d = new Date(t.dueDate + "T12:00:00"); d.setHours(0, 0, 0, 0)
     return d.toDateString() === selectedDate.toDateString()
   })
 
   // Shared with me for current date
   const shared = forDate(selectedDate, isToday).filter(
-    (t) => t.assignedTo !== userId && t.sharedWith?.includes(userId),
+    (t: any) => t.assignedTo !== userId && t.sharedWith?.includes(userId),
   )
-  const sharedPending = shared.filter((t) => !t.completed)
+  const sharedPending = shared.filter((t: any) => !t.completed)
 
   // Tomorrow counts
-  const tomorrowMy = forDate(tomorrow, false).filter((t) => t.assignedTo === userId && !t.completed)
+  const tomorrowMy = forDate(tomorrow, false).filter((t: any) => t.assignedTo === userId && !t.completed)
   const tomorrowShared = forDate(tomorrow, false).filter(
-    (t) => t.assignedTo !== userId && t.sharedWith?.includes(userId) && !t.completed,
+    (t: any) => t.assignedTo !== userId && t.sharedWith?.includes(userId) && !t.completed,
   )
 
   const allDoneToday = isToday && myPending.length === 0 && myAll.length > 0
@@ -890,7 +950,7 @@ export default function TasksPage() {
           next.add(id)
           // Check if all done for today
           if (isToday && tab === "mine") {
-            const still = myPending.filter((t) => t.id !== id && !next.has(t.id))
+            const still = myPending.filter((t: any) => t.id !== id && !next.has(t.id))
             if (still.length === 0 && myPending.length > 0) {
               setTimeout(() => setShowSuccess(true), 200)
             }
@@ -1035,7 +1095,7 @@ export default function TasksPage() {
                   </div>
                   <Card className="border-amber-500/20 py-2">
                     <CardContent className="p-1">
-                      {overdue.map((t) => (
+                      {overdue.map((t: any) => (
                         <TaskRow
                           key={t.id} todo={t} done={false}
                           onToggle={() => toggle(t.id)}
@@ -1046,6 +1106,8 @@ export default function TasksPage() {
                           onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
+                          users={users}
+                          getUserById={getUserById}
                         />
                       ))}
                     </CardContent>
@@ -1063,7 +1125,7 @@ export default function TasksPage() {
                   )}
                   <Card className="py-2">
                     <CardContent className="p-1">
-                      {dateTasks.map((t) => (
+                      {dateTasks.map((t: any) => (
                         <TaskRow
                           key={t.id} todo={t} done={false}
                           onToggle={() => toggle(t.id)}
@@ -1076,6 +1138,8 @@ export default function TasksPage() {
                           onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
+                          users={users}
+                          getUserById={getUserById}
                         />
                       ))}
                     </CardContent>
@@ -1092,7 +1156,7 @@ export default function TasksPage() {
                   </p>
                   <Card className="border-dashed py-2">
                     <CardContent className="p-1">
-                      {myDone.map((t) => (
+                      {myDone.map((t: any) => (
                         <TaskRow
                           key={t.id} todo={t} done
                           onToggle={() => toggle(t.id)}
@@ -1102,6 +1166,8 @@ export default function TasksPage() {
                           onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
+                          users={users}
+                          getUserById={getUserById}
                         />
                       ))}
                     </CardContent>
@@ -1128,7 +1194,7 @@ export default function TasksPage() {
                   </div>
                   <Card className="border-dashed py-2">
                     <CardContent className="p-1">
-                      {tomorrowMy.slice(0, 3).map((t) => (
+                      {tomorrowMy.slice(0, 3).map((t: any) => (
                         <TaskRow
                           key={t.id} todo={t} done={false}
                           onToggle={() => toggle(t.id)}
@@ -1141,6 +1207,8 @@ export default function TasksPage() {
                           onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
+                          users={users}
+                          getUserById={getUserById}
                         />
                       ))}
                       {tomorrowMy.length > 3 && (
@@ -1164,7 +1232,7 @@ export default function TasksPage() {
                 <section>
                   <Card className="py-2">
                     <CardContent className="p-1">
-                      {sharedPending.map((t) => (
+                      {sharedPending.map((t: any) => (
                         <TaskRow
                           key={t.id} todo={t} done={false}
                           onToggle={() => toggle(t.id)}
@@ -1175,6 +1243,8 @@ export default function TasksPage() {
                           onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
+                          users={users}
+                          getUserById={getUserById}
                         />
                       ))}
                     </CardContent>
@@ -1183,17 +1253,17 @@ export default function TasksPage() {
               )}
 
               {/* Shared completed */}
-              {shared.filter((t) => t.completed).length > 0 && (
+              {shared.filter((t: any) => t.completed).length > 0 && (
                 <section>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 px-1 flex items-center gap-2">
                     Completed
                     <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-0">
-                      {shared.filter((t) => t.completed).length}
+                      {shared.filter((t: any) => t.completed).length}
                     </Badge>
                   </p>
                   <Card className="border-dashed py-2">
                     <CardContent className="p-1">
-                      {shared.filter((t) => t.completed).map((t) => (
+                      {shared.filter((t: any) => t.completed).map((t: any) => (
                         <TaskRow
                           key={t.id} todo={t} done
                           onToggle={() => toggle(t.id)}
@@ -1204,6 +1274,8 @@ export default function TasksPage() {
                           onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
+                          users={users}
+                          getUserById={getUserById}
                         />
                       ))}
                     </CardContent>
@@ -1222,7 +1294,7 @@ export default function TasksPage() {
                   </div>
                   <Card className="border-dashed py-2">
                     <CardContent className="p-1">
-                      {tomorrowShared.map((t) => (
+                      {tomorrowShared.map((t: any) => (
                         <TaskRow
                           key={t.id} todo={t} done={false}
                           onToggle={() => toggle(t.id)}
@@ -1235,6 +1307,8 @@ export default function TasksPage() {
                           onRemoveShare={(uid) => removeShare(t.id, uid)}
                           isFlashing={flashingIds.has(t.id)}
                           isAnimating={animatingIds.has(t.id)}
+                          users={users}
+                          getUserById={getUserById}
                         />
                       ))}
                     </CardContent>
@@ -1265,6 +1339,7 @@ export default function TasksPage() {
           onClose={() => setDetailTodo(null)}
           onToggle={() => toggle(detailTodo.id)}
           onDraft={() => { setDetailTodo(null); setEmailTodo(detailTodo) }}
+          getUserById={getUserById}
         />
       )}
 

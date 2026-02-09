@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { venues, getOperatorById, getCompanyById } from "@/lib/mock-data"
+import { Loader2 } from "lucide-react"
+import { useVenues } from "@/queries/venues"
 import type { VenueStage } from "@/lib/mock-data"
 
 const stages: { id: VenueStage; label: string; color: string }[] = [
@@ -24,13 +25,15 @@ function formatCurrency(amount: number) {
 }
 
 export function PipelinePreview() {
-  const activeVenues = venues.filter((v) => v.stage !== "closed-lost" && v.stage !== "closed-won")
-  const wonVenues = venues.filter((v) => v.stage === "closed-won")
+  const { data: venues = [], isLoading } = useVenues()
+
+  const activeVenues = venues.filter((v: any) => v.stage !== "closed-lost" && v.stage !== "closed-won")
+  const wonVenues = venues.filter((v: any) => v.stage === "closed-won")
 
   const pipelineByStage = stages.map((stage) => {
-    const stageVenues = stage.id === "closed-won" ? wonVenues : activeVenues.filter((v) => v.stage === stage.id)
-    const totalValue = stageVenues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
-    const weightedValue = stageVenues.reduce((sum, v) => sum + ((v.dealValue || 0) * (v.probability || 0)) / 100, 0)
+    const stageVenues = stage.id === "closed-won" ? wonVenues : activeVenues.filter((v: any) => v.stage === stage.id)
+    const totalValue = stageVenues.reduce((sum: number, v: any) => sum + (v.dealValue || 0), 0)
+    const weightedValue = stageVenues.reduce((sum: number, v: any) => sum + ((v.dealValue || 0) * (v.probability || 0)) / 100, 0)
 
     return {
       ...stage,
@@ -40,6 +43,19 @@ export function PipelinePreview() {
       weightedValue,
     }
   })
+
+  if (isLoading) {
+    return (
+      <Card className="border-border bg-card">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base font-medium text-card-foreground">Pipeline Overview</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card className="border-border bg-card">
@@ -61,8 +77,8 @@ export function PipelinePreview() {
                 <span className="ml-auto text-xs text-muted-foreground">{stage.count}</span>
               </div>
               <div className="space-y-2">
-                {stage.venues.slice(0, 2).map((venue) => {
-                  const operator = getOperatorById(venue.operatorId)
+                {stage.venues.slice(0, 2).map((venue: any) => {
+                  const operator = venue.operator || null
                   return (
                     <Link key={venue.id} to={`/venues/${venue.id}`}>
                       <div className="rounded-lg border border-border bg-secondary/50 p-3 transition-colors hover:bg-secondary">

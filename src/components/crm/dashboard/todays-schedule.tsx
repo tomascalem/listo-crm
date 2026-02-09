@@ -1,14 +1,9 @@
 import { Link } from "react-router-dom"
-import { Video, Phone, MapPin, ExternalLink, Calendar } from "lucide-react"
+import { Video, Phone, MapPin, ExternalLink, Calendar, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import {
-  getScheduledEventsForUser,
-  getVenueById,
-  getContactById,
-  type ScheduledEvent,
-} from "@/lib/mock-data"
+import { useDashboardSchedule } from "@/queries/dashboard"
 import { LogActivityModal } from "@/components/crm/modals/log-activity-modal"
 
 interface TodaysScheduleProps {
@@ -16,7 +11,9 @@ interface TodaysScheduleProps {
   date?: string
 }
 
-const eventTypeConfig: Record<ScheduledEvent["type"], { icon: typeof Video; label: string; color: string }> = {
+type EventType = "video" | "call" | "meeting"
+
+const eventTypeConfig: Record<EventType, { icon: typeof Video; label: string; color: string }> = {
   video: { icon: Video, label: "Video Call", color: "text-chart-2" },
   call: { icon: Phone, label: "Phone Call", color: "text-primary" },
   meeting: { icon: MapPin, label: "Meeting", color: "text-chart-4" },
@@ -53,7 +50,8 @@ function isEventUpcoming(startTime: string): boolean {
 }
 
 export function TodaysSchedule({ userId, date }: TodaysScheduleProps) {
-  const events = getScheduledEventsForUser(userId, date)
+  const { data: scheduleData, isLoading } = useDashboardSchedule(date)
+  const events = scheduleData?.items || []
 
   return (
     <Card>
@@ -64,7 +62,11 @@ export function TodaysSchedule({ userId, date }: TodaysScheduleProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {events.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+          </div>
+        ) : events.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Calendar className="h-10 w-10 mx-auto mb-3 opacity-50" />
             <p>No meetings scheduled for today</p>
@@ -72,11 +74,11 @@ export function TodaysSchedule({ userId, date }: TodaysScheduleProps) {
           </div>
         ) : (
           <div className="space-y-3">
-            {events.map((event) => {
-              const config = eventTypeConfig[event.type]
+            {events.map((event: any) => {
+              const config = eventTypeConfig[event.type as EventType] || eventTypeConfig.meeting
               const Icon = config.icon
-              const venue = getVenueById(event.venueId)
-              const contact = getContactById(event.contactId)
+              const venue = event.venue
+              const contact = event.contact
               const isNow = isEventNow(event.startTime, event.endTime)
               const isUpcoming = isEventUpcoming(event.startTime)
 

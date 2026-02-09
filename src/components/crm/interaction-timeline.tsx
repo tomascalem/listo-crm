@@ -42,7 +42,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
-import { getContactById, getVenueById, getUserById } from "@/lib/mock-data"
 import type { Interaction, InteractionType, EmailMessage } from "@/lib/mock-data"
 
 interface InteractionTimelineProps {
@@ -351,9 +350,10 @@ function InteractionCard({ interaction }: { interaction: Interaction }) {
   const [replySent, setReplySent] = useState(false)
   const config = typeConfig[interaction.type]
   const Icon = config.icon
-  const contact = getContactById(interaction.contactId)
-  const venue = getVenueById(interaction.venueId)
-  const user = getUserById(interaction.userId)
+  // Use expanded relations from API if available
+  const contact = (interaction as any).contact || null
+  const venue = (interaction as any).venue || null
+  const user = (interaction as any).user || null
   const dateInfo = formatDateTime(interaction.date)
   
   const isEmail = interaction.type === "email" && interaction.emailThread && interaction.emailThread.length > 0

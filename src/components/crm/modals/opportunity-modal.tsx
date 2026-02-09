@@ -31,17 +31,16 @@ import {
   Drama,
   Building,
   Star,
+  Sparkles,
+  AlertCircle,
+  CheckCircle,
 } from "lucide-react"
 import {
   type Venue,
   type VenueType,
   type UseCase,
-  users,
-  getOperatorById,
-  getConcessionaireById,
-  getContactsByVenueId,
-  getInteractionsByVenueId,
 } from "@/lib/mock-data"
+import { useVenueContacts, useVenueInteractions } from "@/queries/venues"
 
 interface OpportunityModalProps {
   venue: Venue
@@ -92,14 +91,106 @@ function formatDate(dateString: string) {
   })
 }
 
+// Generate AI-like deal status analysis
+function generateDealStatus(venue: Venue, interactionCount: number): {
+  health: "healthy" | "attention" | "at-risk"
+  healthLabel: string
+  summary: string
+  reason: string | null
+  nextStep: string
+} {
+  const now = new Date()
+  const lastActivity = new Date(venue.lastActivity)
+  const diffDays = Math.floor((now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24))
+  const stage = venue.stage
+  const dealValue = venue.dealValue || 0
+
+  // Determine health status
+  let health: "healthy" | "attention" | "at-risk" = "healthy"
+  let reason: string | null = null
+
+  if (stage === "negotiation" && diffDays >= 10) {
+    health = "at-risk"
+    reason = `No activity for ${diffDays} days in the critical negotiation stage`
+  } else if (dealValue > 300000 && diffDays >= 14) {
+    health = "at-risk"
+    reason = `This high-value deal ($${(dealValue / 1000).toFixed(0)}K) has been inactive for ${diffDays} days`
+  } else if (diffDays >= 30) {
+    health = "at-risk"
+    reason = `No touchpoint recorded in the last ${diffDays} days`
+  } else if (diffDays >= 14 || (stage === "proposal" && diffDays >= 7)) {
+    health = "attention"
+    reason = diffDays >= 14
+      ? `It's been ${diffDays} days since the last interaction`
+      : `Proposal stage deals typically need follow-up within a week`
+  }
+
+  const healthLabels = {
+    healthy: "On Track",
+    attention: "Needs Attention",
+    "at-risk": "At Risk",
+  }
+
+  // Generate contextual summary based on stage and activity
+  let summary = ""
+  let nextStep = ""
+
+  switch (stage) {
+    case "lead":
+      summary = interactionCount === 0
+        ? "New lead that hasn't been contacted yet. Initial outreach is needed to qualify the opportunity."
+        : `Lead with ${interactionCount} interaction${interactionCount > 1 ? "s" : ""} logged. Consider qualifying by understanding their needs and timeline.`
+      nextStep = interactionCount === 0 ? "Make initial contact to introduce your solution" : "Schedule a discovery call to qualify the opportunity"
+      break
+    case "qualified":
+      summary = `Qualified opportunity showing interest. ${interactionCount} interaction${interactionCount > 1 ? "s" : ""} recorded. Ready to move toward a demo or deeper engagement.`
+      nextStep = "Schedule a product demo to showcase capabilities"
+      break
+    case "demo":
+      summary = `Demo stage with ${interactionCount} logged interaction${interactionCount > 1 ? "s" : ""}. The prospect has seen the product and is evaluating fit.`
+      nextStep = "Follow up on demo feedback and address any concerns"
+      break
+    case "proposal":
+      summary = `Proposal has been sent. ${diffDays === 0 ? "Sent today" : diffDays === 1 ? "Sent yesterday" : `Last activity ${diffDays} days ago`}. Awaiting response or negotiation.`
+      nextStep = diffDays >= 5 ? "Follow up on proposal status" : "Allow time for internal review, then follow up"
+      break
+    case "negotiation":
+      summary = `Active negotiation phase with ${interactionCount} interaction${interactionCount > 1 ? "s" : ""}. Terms and pricing are being discussed.`
+      nextStep = diffDays >= 7 ? "Re-engage to keep momentum and close the deal" : "Continue negotiations and address any blockers"
+      break
+    case "closed-won":
+      summary = "Deal successfully closed! This venue is now a customer."
+      nextStep = "Begin onboarding and implementation process"
+      break
+    case "closed-lost":
+      summary = "This opportunity did not convert. Consider documenting learnings for future reference."
+      nextStep = "Log reasons for loss and plan re-engagement strategy"
+      break
+    default:
+      summary = `Deal in ${stage} stage with ${interactionCount} recorded interactions.`
+      nextStep = "Review deal status and plan next action"
+  }
+
+  return {
+    health,
+    healthLabel: healthLabels[health],
+    summary,
+    reason,
+    nextStep,
+  }
+}
+
 export function OpportunityModal({ venue, open, onOpenChange }: OpportunityModalProps) {
   const [activeTab, setActiveTab] = useState("overview")
 
-  const operator = getOperatorById(venue.operatorId)
-  const concessionaires = venue.concessionaireIds.map(getConcessionaireById).filter(Boolean)
-  const contacts = getContactsByVenueId(venue.id)
-  const interactions = getInteractionsByVenueId(venue.id)
-  const assignedUsers = venue.assignedUserIds.map(id => users.find(u => u.id === id)).filter(Boolean)
+  // Fetch contacts and interactions from API
+  const { data: contacts = [] } = useVenueContacts(venue.id)
+  const { data: interactions = [] } = useVenueInteractions(venue.id)
+
+  // Use data from the venue object (already populated by API)
+  const operator = venue.operator
+  const concessionaires = venue.concessionaires || []
+  const assignedUsers = venue.assignedUsers || []
   const stage = stageConfig[venue.stage]
   const typeConfig = venueTypeConfig[venue.type]
   const TypeIcon = typeConfig.icon
@@ -109,6 +200,9 @@ export function OpportunityModal({ venue, open, onOpenChange }: OpportunityModal
   const totalLicenses = venue.opportunity
     ? venue.opportunity.licenses.watches + venue.opportunity.licenses.mobile + venue.opportunity.licenses.tablets
     : 0
+
+  // Generate AI deal status
+  const dealStatus = generateDealStatus(venue, interactions.length)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -250,6 +344,63 @@ export function OpportunityModal({ venue, open, onOpenChange }: OpportunityModal
               </TabsList>
 
               <TabsContent value="overview" className="mt-0 space-y-6">
+                {/* AI Deal Status Summary */}
+                <div className={`rounded-lg border overflow-hidden ${
+                  dealStatus.health === "healthy" ? "border-success/30 bg-success/5" :
+                  dealStatus.health === "attention" ? "border-warning/30 bg-warning/5" :
+                  "border-destructive/30 bg-destructive/5"
+                }`}>
+                  <div className={`flex items-start gap-3 p-4 border-l-4 ${
+                    dealStatus.health === "healthy" ? "border-l-success" :
+                    dealStatus.health === "attention" ? "border-l-warning" :
+                    "border-l-destructive"
+                  }`}>
+                    <div className={`p-2 rounded-lg shrink-0 ${
+                      dealStatus.health === "healthy" ? "bg-success/20" :
+                      dealStatus.health === "attention" ? "bg-warning/20" :
+                      "bg-destructive/20"
+                    }`}>
+                      {dealStatus.health === "healthy" && <CheckCircle className="h-4 w-4 text-success" />}
+                      {dealStatus.health === "attention" && <AlertCircle className="h-4 w-4 text-warning" />}
+                      {dealStatus.health === "at-risk" && <AlertTriangle className="h-4 w-4 text-destructive" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-sm font-semibold ${
+                          dealStatus.health === "healthy" ? "text-success" :
+                          dealStatus.health === "attention" ? "text-warning" :
+                          "text-destructive"
+                        }`}>{dealStatus.healthLabel}</span>
+                        <span className="text-xs text-muted-foreground">·</span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Sparkles className="h-3 w-3" />
+                          AI Analysis
+                        </span>
+                      </div>
+                      <p className="text-sm text-foreground/80 leading-relaxed">
+                        {dealStatus.summary}
+                        {dealStatus.reason && (
+                          <span className={`font-medium ${dealStatus.health === "at-risk" ? "text-destructive" : "text-warning"}`}>
+                            {" "}{dealStatus.reason}.
+                          </span>
+                        )}
+                      </p>
+                      <div className={`flex items-center gap-2 mt-3 pt-3 border-t ${
+                        dealStatus.health === "healthy" ? "border-success/20" :
+                        dealStatus.health === "attention" ? "border-warning/20" :
+                        "border-destructive/20"
+                      }`}>
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Suggested action:</span>
+                        <span className={`text-sm font-medium px-2.5 py-1 rounded-md ${
+                          dealStatus.health === "healthy" ? "bg-success/10 text-success" :
+                          dealStatus.health === "attention" ? "bg-warning/10 text-warning" :
+                          "bg-destructive/10 text-destructive"
+                        }`}>{dealStatus.nextStep}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {venue.opportunity && (
                   <>
                     {/* Use Cases & Licenses - side by side */}
@@ -410,14 +561,14 @@ export function OpportunityModal({ venue, open, onOpenChange }: OpportunityModal
                     No contacts associated with this venue yet.
                   </p>
                 ) : (
-                  contacts.map((contact) => (
+                  contacts.map((contact: any) => (
                     <Card key={contact.id}>
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-10 w-10">
                               <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                                {contact.avatar || contact.name.split(" ").map((n) => n[0]).join("")}
+                                {contact.avatar || contact.name.split(" ").map((n: string) => n[0]).join("")}
                               </AvatarFallback>
                             </Avatar>
                             <div>
@@ -457,8 +608,8 @@ export function OpportunityModal({ venue, open, onOpenChange }: OpportunityModal
                     No activity recorded yet.
                   </p>
                 ) : (
-                  interactions.slice(0, 5).map((interaction) => {
-                    const user = users.find((u) => u.id === interaction.userId)
+                  interactions.slice(0, 5).map((interaction: any) => {
+                    const user = interaction.user
                     return (
                       <Card key={interaction.id}>
                         <CardContent className="p-4">

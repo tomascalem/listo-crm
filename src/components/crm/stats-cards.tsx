@@ -1,7 +1,7 @@
 import React from "react"
-import { MapPin, Users, DollarSign, TrendingUp, Target, CheckCircle2, Building2 } from "lucide-react"
+import { MapPin, Users, DollarSign, TrendingUp, Target, CheckCircle2, Building2, Loader2 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import { venues } from "@/lib/mock-data"
+import { useVenues } from "@/queries/venues"
 
 interface StatCardProps {
   title: string
@@ -41,17 +41,33 @@ function StatCard({ title, value, change, changeType = "neutral", icon }: StatCa
 }
 
 export function StatsCards() {
+  const { data: venues = [], isLoading } = useVenues()
+
   const totalVenues = venues.length
-  const activeDeals = venues.filter(v => v.stage !== "closed-won" && v.stage !== "closed-lost").length
-  const clientVenues = venues.filter(v => v.status === "client").length
-  const pipelineValue = venues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
-  const wonDeals = venues.filter(v => v.stage === "closed-won").length
+  const activeDeals = venues.filter((v: any) => v.stage !== "closed-won" && v.stage !== "closed-lost").length
+  const clientVenues = venues.filter((v: any) => v.status === "client").length
+  const pipelineValue = venues.reduce((sum: number, v: any) => sum + (v.dealValue || 0), 0)
+  const wonDeals = venues.filter((v: any) => v.stage === "closed-won").length
   const winRate = totalVenues > 0 ? Math.round((wonDeals / totalVenues) * 100) : 0
 
   const formatCurrency = (amount: number) => {
     if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`
     if (amount >= 1000) return `$${(amount / 1000).toFixed(0)}K`
     return `$${amount}`
+  }
+
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <Card key={i} className="bg-card border-border">
+            <CardContent className="p-6 flex items-center justify-center h-[120px]">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
   }
 
   return (

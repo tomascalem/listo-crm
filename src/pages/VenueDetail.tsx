@@ -35,18 +35,18 @@ import {
   Clock,
   Briefcase,
   ChefHat,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
-  getVenueById,
-  getOperatorById,
-  getConcessionaireById,
-  getContactsByVenueId,
-  getInteractionsByVenueId,
-  getTodosByVenueId,
-  getFilesForVenue,
-  getContractsForVenue,
-  interactions as allInteractions,
+  useVenue,
+  useVenueContacts,
+  useVenueInteractions,
+  useVenueTodos,
+} from "@/queries/venues"
+import { useFiles } from "@/queries/files"
+import { useContracts } from "@/queries/contracts"
+import {
   type VenueStage,
   type VenueType,
   type FileType,
@@ -133,9 +133,39 @@ function formatCurrency(amount: number) {
   }).format(amount)
 }
 
+// Helper to convert API venue type (underscore) to frontend type (hyphen)
+function normalizeVenueType(type: string): VenueType {
+  return type.replace(/_/g, '-') as VenueType
+}
+
+// Helper to convert API stage (underscore) to frontend stage (hyphen)
+function normalizeStage(stage: string): VenueStage {
+  return stage.replace(/_/g, '-') as VenueStage
+}
+
 export default function VenueDetail() {
   const { id } = useParams<{ id: string }>()
-  const venue = id ? getVenueById(id) : null
+  const { data: venue, isLoading: venueLoading } = useVenue(id || '')
+  const { data: contacts = [] } = useVenueContacts(id || '')
+  const { data: interactions = [] } = useVenueInteractions(id || '')
+  const { data: todos = [] } = useVenueTodos(id || '')
+
+  // Fetch files and contracts from API
+  const { data: venueFilesData = [] } = useFiles('venue', id || '')
+  const { data: venueContractsData = [] } = useContracts('venue', id || '')
+
+  if (venueLoading) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 pl-64 p-8">
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   if (!venue) {
     return (
@@ -153,23 +183,43 @@ export default function VenueDetail() {
     )
   }
 
-  const operator = getOperatorById(venue.operatorId)
-  const venueConcessionaires = venue.concessionaireIds.map(cid => getConcessionaireById(cid)).filter(Boolean)
-  const contacts = getContactsByVenueId(venue.id)
-  const interactions = getInteractionsByVenueId(venue.id)
-  const todos = getTodosByVenueId(venue.id)
-  const { venueFiles, inheritedFromOperator: inheritedFilesOperator, inheritedFromConcessionaire: inheritedFilesConcessionaire } = getFilesForVenue(venue.id)
-  const { venueContracts, inheritedFromOperator: inheritedContractsOperator, inheritedFromConcessionaire: inheritedContractsConcessionaire } = getContractsForVenue(venue.id)
-  const venueConfig = venueTypeConfig[venue.type]
+  // Get related data from venue object (populated by API)
+  const operator = venue.operator
+  const venueConcessionaires = venue.concessionaires || []
+
+  // Files and contracts are fetched from API hooks above
+  // For now, we only show venue-specific files/contracts
+  // TODO: Add inherited files from operator/concessionaires when API supports it
+  const venueFiles = venueFilesData.map((f: any) => ({
+    ...f,
+    date: f.createdAt || f.date || new Date().toISOString(),
+    url: f.s3Url || f.url || '#',
+  }))
+  const inheritedFilesOperator: any[] = []
+  const inheritedFilesConcessionaire: any[] = []
+
+  const venueContracts = venueContractsData.map((c: any) => ({
+    ...c,
+    date: c.effectiveDate || c.createdAt || new Date().toISOString(),
+    url: c.s3Url || c.url || '#',
+  }))
+  const inheritedContractsOperator: any[] = []
+  const inheritedContractsConcessionaire: any[] = []
+
+  // Normalize venue type and stage from API format (underscores) to frontend format (hyphens)
+  const normalizedType = normalizeVenueType(venue.type)
+  const normalizedStage = normalizeStage(venue.stage)
+
+  const venueConfig = venueTypeConfig[normalizedType] || venueTypeConfig.other
   const VenueIcon = venueConfig.icon
 
   const totalFiles = venueFiles.length + inheritedFilesOperator.length + inheritedFilesConcessionaire.length
   const totalContracts = venueContracts.length + inheritedContractsOperator.length + inheritedContractsConcessionaire.length
 
-  // Get interactions for each contact
+  // Get interactions for each contact from the API data
   const getContactInteractions = (contactId: string) => {
-    return allInteractions.filter(i => i.contactId === contactId && i.venueId === venue.id)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    return interactions.filter((i: any) => i.contactId === contactId)
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
   }
 
   return (
@@ -192,8 +242,8 @@ export default function VenueDetail() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl font-bold text-card-foreground">{venue.name}</h1>
-                <Badge className={`${stageColors[venue.stage]} text-white`}>
-                  {stageLabels[venue.stage]}
+                <Badge className={`${stageColors[normalizedStage]} text-white`}>
+                  {stageLabels[normalizedStage]}
                 </Badge>
               </div>
               <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground flex-wrap">
@@ -203,7 +253,7 @@ export default function VenueDetail() {
                 </span>
                 <span className="flex items-center gap-1 capitalize">
                   <VenueIcon className="h-4 w-4" />
-                  {venue.type.replace('-', ' ')}
+                  {normalizedType.replace('-', ' ')}
                 </span>
                 {venue.capacity && (
                   <span className="flex items-center gap-1">
@@ -264,7 +314,7 @@ export default function VenueDetail() {
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Type</p>
-                          <p className="capitalize">{venue.type}</p>
+                          <p className="capitalize">{normalizedType.replace('-', ' ')}</p>
                         </div>
                         {venue.capacity && (
                           <div>
@@ -281,7 +331,7 @@ export default function VenueDetail() {
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-3">
-                          {venueConcessionaires.map((con) => con && (
+                          {venueConcessionaires.map((con: any) => con && (
                             <Link key={con.id} to={`/concessionaires/${con.id}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary">
                               <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
                                 {con.logo}
@@ -307,7 +357,7 @@ export default function VenueDetail() {
 
             <TabsContent value="contacts" className="mt-6">
               <div className="grid gap-4 md:grid-cols-2">
-                {contacts.map((contact) => {
+                {contacts.map((contact: any) => {
                   const contactInteractions = getContactInteractions(contact.id)
                   const lastInteraction = contactInteractions[0]
 
@@ -319,7 +369,7 @@ export default function VenueDetail() {
                           <div className="flex items-start gap-4">
                             <Avatar className="h-12 w-12 border-2 border-primary/20">
                               <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                                {contact.avatar || contact.name.split(' ').map(n => n[0]).join('')}
+                                {contact.avatar || contact.name.split(' ').map((n: string) => n[0]).join('')}
                               </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
@@ -425,8 +475,8 @@ export default function VenueDetail() {
                             <span className="text-sm font-medium text-muted-foreground">{month}</span>
                           </div>
                           <div className="grid gap-3 md:grid-cols-2">
-                            {monthFiles.map((file) => {
-                              const typeConfig = fileTypeConfig[file.type]
+                            {monthFiles.map((file: any) => {
+                              const typeConfig = fileTypeConfig[file.type as FileType] || fileTypeConfig.other
                               const FileIcon = typeConfig.icon
                               return (
                                 <a
@@ -510,13 +560,13 @@ export default function VenueDetail() {
                               <span className="text-sm font-medium text-chart-2">{operator.name}</span>
                             </div>
                             <div className="space-y-2">
-                              {inheritedFilesOperator.map((file) => {
-                                const typeConfig = fileTypeConfig[file.type]
+                              {inheritedFilesOperator.map((file: any) => {
+                                const typeConfig = fileTypeConfig[file.type as FileType] || fileTypeConfig.other
                                 const FileIcon = typeConfig.icon
                                 return (
                                   <a
                                     key={file.id}
-                                    href={file.url}
+                                    href={file.url || '#'}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="group flex items-center gap-2 p-2 rounded-lg hover:bg-chart-2/10 transition-colors"
@@ -546,14 +596,13 @@ export default function VenueDetail() {
                               <span className="text-sm font-medium text-warning">Concessionaires</span>
                             </div>
                             <div className="space-y-2">
-                              {inheritedFilesConcessionaire.map((file) => {
-                                const typeConfig = fileTypeConfig[file.type]
+                              {inheritedFilesConcessionaire.map((file: any) => {
+                                const typeConfig = fileTypeConfig[file.type as FileType] || fileTypeConfig.other
                                 const FileIcon = typeConfig.icon
-                                const concessionaire = getConcessionaireById(file.entityId)
                                 return (
                                   <a
                                     key={file.id}
-                                    href={file.url}
+                                    href={file.url || '#'}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="group flex items-center gap-2 p-2 rounded-lg hover:bg-warning/10 transition-colors"
@@ -563,9 +612,7 @@ export default function VenueDetail() {
                                       <p className="text-sm font-medium line-clamp-1 group-hover:text-warning transition-colors">
                                         {file.name}
                                       </p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {concessionaire?.name} • {typeConfig.label}
-                                      </p>
+                                      <p className="text-xs text-muted-foreground">{typeConfig.label}</p>
                                     </div>
                                     <LinkIcon className="h-3 w-3 text-muted-foreground shrink-0" />
                                   </a>
@@ -608,8 +655,8 @@ export default function VenueDetail() {
                   {/* Venue Contracts */}
                   {venueContracts.length > 0 ? (
                     <div className="grid gap-4 md:grid-cols-2">
-                      {venueContracts.map((contract) => {
-                        const sConfig = contractStatusConfig[contract.status]
+                      {venueContracts.map((contract: any) => {
+                        const sConfig = contractStatusConfig[contract.status as ContractStatus] || contractStatusConfig.pending
                         const isExpiringSoon = contract.expirationDate &&
                           new Date(contract.expirationDate).getTime() - Date.now() < 90 * 24 * 60 * 60 * 1000 &&
                           contract.status === 'active'
@@ -650,7 +697,7 @@ export default function VenueDetail() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
                                   <Badge variant="outline" className="text-xs font-medium">
-                                    {contractTypeLabels[contract.type]}
+                                    {contractTypeLabels[contract.type as ContractType] || contract.type}
                                   </Badge>
                                   <Badge className={cn(sConfig.bgColor, sConfig.color, "capitalize text-xs")}>
                                     {contract.status}
@@ -714,12 +761,12 @@ export default function VenueDetail() {
                               <span className="text-sm font-medium text-chart-2">{operator.name}</span>
                             </div>
                             <div className="space-y-2">
-                              {inheritedContractsOperator.map((contract) => {
-                                const sConfig = contractStatusConfig[contract.status]
+                              {inheritedContractsOperator.map((contract: any) => {
+                                const sConfig = contractStatusConfig[contract.status as ContractStatus] || contractStatusConfig.pending
                                 return (
                                   <a
                                     key={contract.id}
-                                    href={contract.url}
+                                    href={contract.url || '#'}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="group block p-2 rounded-lg hover:bg-chart-2/10 transition-colors"
@@ -731,7 +778,7 @@ export default function VenueDetail() {
                                       </p>
                                     </div>
                                     <div className="flex items-center gap-2 pl-6">
-                                      <Badge variant="outline" className="text-xs">{contractTypeLabels[contract.type]}</Badge>
+                                      <Badge variant="outline" className="text-xs">{contractTypeLabels[contract.type as ContractType] || contract.type}</Badge>
                                       <Badge className={cn(sConfig.bgColor, sConfig.color, "capitalize text-xs")}>
                                         {contract.status}
                                       </Badge>
@@ -753,13 +800,12 @@ export default function VenueDetail() {
                               <span className="text-sm font-medium text-warning">Concessionaires</span>
                             </div>
                             <div className="space-y-2">
-                              {inheritedContractsConcessionaire.map((contract) => {
-                                const sConfig = contractStatusConfig[contract.status]
-                                const concessionaire = getConcessionaireById(contract.entityId)
+                              {inheritedContractsConcessionaire.map((contract: any) => {
+                                const sConfig = contractStatusConfig[contract.status as ContractStatus] || contractStatusConfig.pending
                                 return (
                                   <a
                                     key={contract.id}
-                                    href={contract.url}
+                                    href={contract.url || '#'}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="group block p-2 rounded-lg hover:bg-warning/10 transition-colors"
@@ -771,10 +817,7 @@ export default function VenueDetail() {
                                       </p>
                                     </div>
                                     <div className="flex items-center gap-2 pl-6 flex-wrap">
-                                      {concessionaire && (
-                                        <span className="text-xs text-warning">{concessionaire.name}</span>
-                                      )}
-                                      <Badge variant="outline" className="text-xs">{contractTypeLabels[contract.type]}</Badge>
+                                      <Badge variant="outline" className="text-xs">{contractTypeLabels[contract.type as ContractType] || contract.type}</Badge>
                                       <Badge className={cn(sConfig.bgColor, sConfig.color, "capitalize text-xs")}>
                                         {contract.status}
                                       </Badge>
@@ -813,7 +856,7 @@ export default function VenueDetail() {
               <Card>
                 <CardContent className="p-6">
                   <div className="space-y-4">
-                    {todos.map((todo) => (
+                    {todos.map((todo: any) => (
                       <div key={todo.id} className="flex items-center gap-4 p-4 rounded-lg border">
                         <input type="checkbox" checked={todo.completed} readOnly className="h-4 w-4" />
                         <div className="flex-1">

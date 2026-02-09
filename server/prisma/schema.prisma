@@ -1,0 +1,639 @@
+// Prisma Schema for Listo CRM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum VenueStatus {
+  client
+  prospect
+  churned
+  negotiating
+}
+
+enum VenueStage {
+  lead
+  qualified
+  demo
+  proposal
+  negotiation
+  closed_won
+  closed_lost
+}
+
+enum VenueType {
+  stadium
+  arena
+  amphitheater
+  theater
+  convention_center
+  other
+}
+
+enum InteractionType {
+  call
+  video
+  email
+  meeting
+  note
+}
+
+enum TaskType {
+  email
+  call
+  meeting
+  document
+  follow_up
+  other
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+}
+
+enum FileType {
+  deck
+  one_pager
+  proposal
+  report
+  other
+}
+
+enum ContractType {
+  msa
+  sow
+  nda
+  other
+}
+
+enum ContractStatus {
+  active
+  expired
+  pending
+  terminated
+}
+
+enum EntityType {
+  venue
+  operator
+  concessionaire
+}
+
+enum ScheduledEventType {
+  call
+  video
+  meeting
+}
+
+enum RecommendedActionType {
+  follow_up_email
+  schedule_call
+  send_proposal
+  check_in
+}
+
+enum InsightType {
+  contract_news
+  engagement_metric
+  pipeline_alert
+  milestone
+  inbound_activity
+}
+
+enum InsightPriority {
+  info
+  positive
+  warning
+  urgent
+}
+
+enum NotificationType {
+  assignment
+  mention
+  reminder
+  due_date
+  system
+}
+
+enum AuditAction {
+  create
+  update
+  delete
+}
+
+enum ImportStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+// ============================================
+// AUTH & USERS
+// ============================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  avatar       String // Initials like "SC"
+  avatarUrl    String?  @map("avatar_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Refresh tokens for auth
+  refreshTokens RefreshToken[]
+
+  // Relations
+  assignedVenues     VenueAssignment[]
+  interactions       Interaction[]
+  todosAssigned      Todo[]              @relation("AssignedTodos")
+  todosCreated       Todo[]              @relation("CreatedTodos")
+  todosSharedWith    TodoShare[]
+  scheduledEvents    ScheduledEvent[]
+  recommendedActions RecommendedAction[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+  importJobs         ImportJob[]
+  preferences        UserPreference?
+  uploadedFiles      VenueFile[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("refresh_tokens")
+}
+
+model UserPreference {
+  id                 String  @id @default(cuid())
+  userId             String  @unique @map("user_id")
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailNotifications Boolean @default(true) @map("email_notifications")
+  inAppNotifications Boolean @default(true) @map("in_app_notifications")
+  theme              String  @default("system")
+  timezone           String  @default("America/New_York")
+
+  @@map("user_preferences")
+}
+
+// ============================================
+// OPERATORS & CONCESSIONAIRES
+// ============================================
+
+model Operator {
+  id           String   @id @default(cuid())
+  name         String
+  logo         String?
+  website      String?
+  description  String?
+  headquarters String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  venues   Venue[]
+  contacts Contact[]
+  files    VenueFile[]
+  contracts Contract[]
+  insights BusinessInsight[]
+
+  @@map("operators")
+}
+
+model Concessionaire {
+  id           String   @id @default(cuid())
+  name         String
+  logo         String?
+  website      String?
+  description  String?
+  headquarters String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  venues    VenueConcessionaire[]
+  contacts  Contact[]
+  files     VenueFile[]
+  contracts Contract[]
+
+  @@map("concessionaires")
+}
+
+// ============================================
+// VENUES
+// ============================================
+
+model Venue {
+  id           String      @id @default(cuid())
+  name         String
+  address      String
+  city         String
+  state        String
+  type         VenueType
+  capacity     Int?
+  stage        VenueStage  @default(lead)
+  status       VenueStatus @default(prospect)
+  dealValue    Float?      @map("deal_value")
+  probability  Int? // 0-100
+  nextFollowUp DateTime?   @map("next_follow_up")
+  notes        String?
+  imageUrl     String?     @map("image_url")
+  teamLogoUrl  String?     @map("team_logo_url")
+  teamName     String?     @map("team_name")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  lastActivity DateTime    @default(now()) @map("last_activity")
+
+  // Opportunity details (JSON for flexibility)
+  opportunity Json? // OpportunityDetails
+
+  // Relations
+  operatorId String   @map("operator_id")
+  operator   Operator @relation(fields: [operatorId], references: [id])
+
+  concessionaires    VenueConcessionaire[]
+  assignedUsers      VenueAssignment[]
+  contacts           ContactVenue[]
+  interactions       Interaction[]
+  todos              Todo[]
+  files              VenueFile[]
+  contracts          Contract[]
+  scheduledEvents    ScheduledEvent[]
+  recommendedActions RecommendedAction[]
+  insights           BusinessInsight[]
+
+  @@map("venues")
+}
+
+// Junction table for Venue-Concessionaire (M:N)
+model VenueConcessionaire {
+  venueId          String         @map("venue_id")
+  concessionaireId String         @map("concessionaire_id")
+  venue            Venue          @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  concessionaire   Concessionaire @relation(fields: [concessionaireId], references: [id], onDelete: Cascade)
+
+  @@id([venueId, concessionaireId])
+  @@map("venue_concessionaires")
+}
+
+// Junction table for Venue-User assignment (M:N)
+model VenueAssignment {
+  venueId    String   @map("venue_id")
+  userId     String   @map("user_id")
+  venue      Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  @@id([venueId, userId])
+  @@map("venue_assignments")
+}
+
+// ============================================
+// CONTACTS
+// ============================================
+
+model Contact {
+  id               String   @id @default(cuid())
+  name             String
+  email            String
+  phone            String
+  role             String
+  isPrimary        Boolean  @default(false) @map("is_primary")
+  avatar           String? // Initials
+  linkedIn         String?  @map("linkedin")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Optional direct associations
+  operatorId       String?         @map("operator_id")
+  operator         Operator?       @relation(fields: [operatorId], references: [id])
+  concessionaireId String?         @map("concessionaire_id")
+  concessionaire   Concessionaire? @relation(fields: [concessionaireId], references: [id])
+
+  // Relations
+  venues             ContactVenue[]
+  interactions       Interaction[]
+  todos              Todo[]
+  scheduledEvents    ScheduledEvent[]
+  recommendedActions RecommendedAction[]
+
+  @@map("contacts")
+}
+
+// Junction table for Contact-Venue (M:N)
+model ContactVenue {
+  contactId String  @map("contact_id")
+  venueId   String  @map("venue_id")
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  venue     Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, venueId])
+  @@map("contact_venues")
+}
+
+// ============================================
+// INTERACTIONS
+// ============================================
+
+model Interaction {
+  id           String          @id @default(cuid())
+  type         InteractionType
+  date         DateTime
+  duration     Int? // Minutes
+  summary      String
+  transcript   String?
+  recordingUrl String?         @map("recording_url")
+  highlights   String[] // Array of strings
+  wants        String[]
+  concerns     String[]
+
+  // Email thread stored as JSON
+  emailThread Json? @map("email_thread") // EmailMessage[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  contactId String  @map("contact_id")
+  contact   Contact @relation(fields: [contactId], references: [id])
+  venueId   String  @map("venue_id")
+  venue     Venue   @relation(fields: [venueId], references: [id])
+  userId    String  @map("user_id")
+  user      User    @relation(fields: [userId], references: [id])
+
+  // Todos sourced from this interaction
+  sourcedTodos Todo[]
+
+  @@map("interactions")
+}
+
+// ============================================
+// TODOS
+// ============================================
+
+model Todo {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  dueDate     DateTime     @map("due_date")
+  dueTime     String?      @map("due_time") // "10:00 AM" format
+  completed   Boolean      @default(false)
+  priority    TaskPriority @default(medium)
+  type        TaskType
+
+  // Source tracking (embedded JSON)
+  source Json? // TodoSource
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  assignedToId String @map("assigned_to_id")
+  assignedTo   User   @relation("AssignedTodos", fields: [assignedToId], references: [id])
+  createdById  String @map("created_by_id")
+  createdBy    User   @relation("CreatedTodos", fields: [createdById], references: [id])
+
+  sharedWith TodoShare[]
+
+  venueId   String?  @map("venue_id")
+  venue     Venue?   @relation(fields: [venueId], references: [id])
+  contactId String?  @map("contact_id")
+  contact   Contact? @relation(fields: [contactId], references: [id])
+
+  // Optional link to source interaction
+  sourceInteractionId String?      @map("source_interaction_id")
+  sourceInteraction   Interaction? @relation(fields: [sourceInteractionId], references: [id])
+
+  @@map("todos")
+}
+
+// Junction table for Todo sharing (M:N)
+model TodoShare {
+  todoId String @map("todo_id")
+  userId String @map("user_id")
+  todo   Todo   @relation(fields: [todoId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([todoId, userId])
+  @@map("todo_shares")
+}
+
+// ============================================
+// FILES & CONTRACTS
+// ============================================
+
+model VenueFile {
+  id            String     @id @default(cuid())
+  name          String
+  type          FileType
+  s3Key         String?    @map("s3_key")
+  s3Url         String?    @map("s3_url")
+  size          Int? // bytes
+  mimeType      String?    @map("mime_type")
+  url           String? // Legacy external URL
+  description   String?
+  entityType    EntityType @map("entity_type")
+  isInheritable Boolean    @default(false) @map("is_inheritable")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  // Uploaded by
+  uploadedById String? @map("uploaded_by_id")
+  uploadedBy   User?   @relation(fields: [uploadedById], references: [id])
+
+  // Polymorphic relations - only one will be set
+  venueId          String?         @map("venue_id")
+  venue            Venue?          @relation(fields: [venueId], references: [id])
+  operatorId       String?         @map("operator_id")
+  operator         Operator?       @relation(fields: [operatorId], references: [id])
+  concessionaireId String?         @map("concessionaire_id")
+  concessionaire   Concessionaire? @relation(fields: [concessionaireId], references: [id])
+
+  @@map("venue_files")
+}
+
+model Contract {
+  id             String         @id @default(cuid())
+  name           String
+  type           ContractType
+  effectiveDate  DateTime       @map("effective_date")
+  expirationDate DateTime?      @map("expiration_date")
+  status         ContractStatus @default(pending)
+  s3Key          String?        @map("s3_key")
+  s3Url          String?        @map("s3_url")
+  url            String? // Legacy external URL
+  description    String?
+  entityType     EntityType     @map("entity_type")
+  isInheritable  Boolean        @default(false) @map("is_inheritable")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  // Polymorphic relations
+  venueId          String?         @map("venue_id")
+  venue            Venue?          @relation(fields: [venueId], references: [id])
+  operatorId       String?         @map("operator_id")
+  operator         Operator?       @relation(fields: [operatorId], references: [id])
+  concessionaireId String?         @map("concessionaire_id")
+  concessionaire   Concessionaire? @relation(fields: [concessionaireId], references: [id])
+
+  @@map("contracts")
+}
+
+// ============================================
+// DASHBOARD ENTITIES
+// ============================================
+
+model ScheduledEvent {
+  id          String             @id @default(cuid())
+  type        ScheduledEventType
+  title       String
+  startTime   DateTime           @map("start_time")
+  endTime     DateTime?          @map("end_time")
+  meetingLink String?            @map("meeting_link")
+  location    String?
+  notes       String?
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  venueId   String?  @map("venue_id")
+  venue     Venue?   @relation(fields: [venueId], references: [id])
+  contactId String?  @map("contact_id")
+  contact   Contact? @relation(fields: [contactId], references: [id])
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("scheduled_events")
+}
+
+model RecommendedAction {
+  id               String                @id @default(cuid())
+  type             RecommendedActionType
+  priority         TaskPriority
+  title            String
+  reason           String
+  suggestedContent String?               @map("suggested_content")
+  dueBy            DateTime?             @map("due_by")
+  dismissed        Boolean               @default(false)
+  completedAt      DateTime?             @map("completed_at")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  // Relations
+  venueId   String  @map("venue_id")
+  venue     Venue   @relation(fields: [venueId], references: [id])
+  contactId String  @map("contact_id")
+  contact   Contact @relation(fields: [contactId], references: [id])
+  userId    String  @map("user_id")
+  user      User    @relation(fields: [userId], references: [id])
+
+  @@map("recommended_actions")
+}
+
+model BusinessInsight {
+  id          String          @id @default(cuid())
+  type        InsightType
+  title       String
+  description String
+  timestamp   DateTime        @default(now())
+  priority    InsightPriority @default(info)
+
+  // Optional metric data as JSON
+  metric Json? // { value: number, change: number, unit: string }
+
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Optional relations
+  venueId    String?   @map("venue_id")
+  venue      Venue?    @relation(fields: [venueId], references: [id])
+  operatorId String?   @map("operator_id")
+  operator   Operator? @relation(fields: [operatorId], references: [id])
+
+  @@map("business_insights")
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id         String           @id @default(cuid())
+  userId     String           @map("user_id")
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  title      String
+  message    String
+  read       Boolean          @default(false)
+  readAt     DateTime?        @map("read_at")
+  entityType String?          @map("entity_type") // "venue", "todo", etc.
+  entityId   String?          @map("entity_id") // ID of related entity
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+// ============================================
+// AUDIT LOG
+// ============================================
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  userId     String      @map("user_id")
+  user       User        @relation(fields: [userId], references: [id])
+  action     AuditAction
+  entityType String      @map("entity_type") // "venue", "contact", etc.
+  entityId   String      @map("entity_id")
+  changes    Json // { field: { old: value, new: value } }
+  ipAddress  String?     @map("ip_address")
+  userAgent  String?     @map("user_agent")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================
+// IMPORT/EXPORT
+// ============================================
+
+model ImportJob {
+  id            String       @id @default(cuid())
+  userId        String       @map("user_id")
+  user          User         @relation(fields: [userId], references: [id])
+  type          String // "venues", "contacts"
+  status        ImportStatus @default(pending)
+  fileName      String       @map("file_name")
+  totalRows     Int          @map("total_rows")
+  processedRows Int          @default(0) @map("processed_rows")
+  successRows   Int          @default(0) @map("success_rows")
+  errorRows     Int          @default(0) @map("error_rows")
+  errors        Json? // [{ row: 5, field: "email", error: "Invalid format" }]
+  createdAt     DateTime     @default(now()) @map("created_at")
+  completedAt   DateTime?    @map("completed_at")
+
+  @@map("import_jobs")
+}

@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { getVenueById, getContactById, getUserById } from "@/lib/mock-data"
 import type { Todo } from "@/lib/mock-data"
 
 interface TodosListProps {
@@ -51,9 +50,10 @@ function formatDueDate(dateStr: string) {
 }
 
 function TodoItem({ todo, onToggle }: { todo: Todo; onToggle: (id: string) => void }) {
-  const venue = todo.venueId ? getVenueById(todo.venueId) : null
-  const contact = todo.contactId ? getContactById(todo.contactId) : null
-  const assignee = getUserById(todo.assignedTo)
+  // Use expanded relations from API if available
+  const venue = (todo as any).venue || null
+  const contact = (todo as any).contact || null
+  const assignee = (todo as any).assignedTo || null
   const dueInfo = formatDueDate(todo.dueDate)
   const priority = priorityConfig[todo.priority]
 
@@ -196,7 +196,7 @@ export function TodosList({ todos, compact }: TodosListProps) {
                 )}>
                   {todo.title}
                 </p>
-                <p className="text-xs text-muted-foreground">{todo.venueId ? getVenueById(todo.venueId)?.name : null}</p>
+                <p className="text-xs text-muted-foreground">{(todo as any).venue?.name}</p>
               </div>
               <span className={cn("text-xs", formatDueDate(todo.dueDate).className)}>
                 {formatDueDate(todo.dueDate).text}

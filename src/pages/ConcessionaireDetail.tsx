@@ -30,21 +30,19 @@ import {
   Share2,
   Calendar,
   Clock,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import {
-  getConcessionaireById,
-  getVenuesByConcessionaireId,
-  getContactsByConcessionaireId,
-  getFilesByEntityId,
-  getContractsByEntityId,
-  interactions,
-  type VenueStatus,
-  type VenueType,
-  type FileType,
-  type ContractType,
-  type ContractStatus,
-} from "@/lib/mock-data"
+import { useConcessionaire, useConcessionaireVenues, useConcessionaireContacts } from "@/queries/concessionaires"
+import { useFiles } from "@/queries/files"
+import { useContracts } from "@/queries/contracts"
+import { useInteractions } from "@/queries/interactions"
+
+type VenueStatus = "client" | "prospect" | "negotiating" | "churned"
+type VenueType = "stadium" | "arena" | "amphitheater" | "theater" | "convention-center" | "other"
+type FileType = "deck" | "one-pager" | "proposal" | "report" | "other"
+type ContractType = "msa" | "sow" | "nda" | "other"
+type ContractStatus = "active" | "pending" | "expired" | "terminated"
 
 // File type icons and colors
 const fileTypeConfig: Record<FileType, { icon: typeof FileText; color: string; label: string }> = {
@@ -115,7 +113,31 @@ function formatCurrency(amount: number) {
 
 export default function ConcessionaireDetail() {
   const { id } = useParams<{ id: string }>()
-  const concessionaire = id ? getConcessionaireById(id) : null
+  const { data: concessionaire, isLoading } = useConcessionaire(id || '')
+  const { data: venues = [] } = useConcessionaireVenues(id || '')
+  const { data: contacts = [] } = useConcessionaireContacts(id || '')
+  const { data: files = [] } = useFiles('concessionaire', id || '')
+  const { data: concessionaireContracts = [] } = useContracts('concessionaire', id || '')
+  const { data: allInteractions = [] } = useInteractions()
+
+  const totalValue = venues.reduce((sum: number, v: any) => sum + (v.dealValue || 0), 0)
+
+  // Get interactions for this concessionaire's venues
+  const venueIds = venues.map((v: any) => v.id)
+  const concessionaireInteractions = allInteractions
+    .filter((i: any) => venueIds.includes(i.venueId))
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 pl-64 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </main>
+      </div>
+    )
+  }
 
   if (!concessionaire) {
     return (
@@ -132,18 +154,6 @@ export default function ConcessionaireDetail() {
       </div>
     )
   }
-
-  const venues = getVenuesByConcessionaireId(concessionaire.id)
-  const contacts = getContactsByConcessionaireId(concessionaire.id)
-  const files = getFilesByEntityId("concessionaire", concessionaire.id)
-  const concessionaireContracts = getContractsByEntityId("concessionaire", concessionaire.id)
-  const totalValue = venues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
-
-  // Get interactions for this concessionaire's venues
-  const venueIds = venues.map(v => v.id)
-  const concessionaireInteractions = interactions
-    .filter(i => venueIds.includes(i.venueId))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -235,9 +245,9 @@ export default function ConcessionaireDetail() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
-                        {venues.slice(0, 3).map((venue) => {
-                          const status = statusConfig[venue.status]
-                          const typeConfig = venueTypeConfig[venue.type]
+                        {venues.slice(0, 3).map((venue: any) => {
+                          const status = statusConfig[venue.status as VenueStatus] || statusConfig.prospect
+                          const typeConfig = venueTypeConfig[venue.type as VenueType] || venueTypeConfig.other
                           const TypeIcon = typeConfig.icon
 
                           return (
@@ -278,9 +288,9 @@ export default function ConcessionaireDetail() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {venues.map((venue) => {
-                      const status = statusConfig[venue.status]
-                      const typeConfig = venueTypeConfig[venue.type]
+                    {venues.map((venue: any) => {
+                      const status = statusConfig[venue.status as VenueStatus] || statusConfig.prospect
+                      const typeConfig = venueTypeConfig[venue.type as VenueType] || venueTypeConfig.other
                       const TypeIcon = typeConfig.icon
 
                       return (
@@ -312,10 +322,10 @@ export default function ConcessionaireDetail() {
                     {contacts.length === 0 ? (
                       <p className="text-muted-foreground text-center py-4">No contacts associated with this concessionaire</p>
                     ) : (
-                      contacts.map((contact) => (
+                      contacts.map((contact: any) => (
                         <Link key={contact.id} to={`/contacts/${contact.id}`} className="flex items-center gap-4 p-4 rounded-lg border hover:bg-secondary/50 transition-colors">
                           <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary border border-primary/20">
-                            {contact.avatar || contact.name.split(' ').map(n => n[0]).join('')}
+                            {contact.avatar || contact.name.split(' ').map((n: string) => n[0]).join('')}
                           </div>
                           <div className="flex-1">
                             <p className="font-medium">{contact.name}</p>
@@ -354,8 +364,8 @@ export default function ConcessionaireDetail() {
                         <span className="text-sm font-medium text-muted-foreground">{month}</span>
                       </div>
                       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                        {monthFiles.map((file) => {
-                          const typeConfig = fileTypeConfig[file.type]
+                        {monthFiles.map((file: any) => {
+                          const typeConfig = fileTypeConfig[file.type as FileType] || fileTypeConfig.other
                           const FileIcon = typeConfig.icon
                           return (
                             <a
@@ -446,8 +456,8 @@ export default function ConcessionaireDetail() {
 
               {concessionaireContracts.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2">
-                  {concessionaireContracts.map((contract) => {
-                    const sConfig = contractStatusConfig[contract.status]
+                  {concessionaireContracts.map((contract: any) => {
+                    const sConfig = contractStatusConfig[contract.status as ContractStatus] || contractStatusConfig.pending
                     const isExpiringSoon = contract.expirationDate &&
                       new Date(contract.expirationDate).getTime() - Date.now() < 90 * 24 * 60 * 60 * 1000 &&
                       contract.status === 'active'
@@ -496,7 +506,7 @@ export default function ConcessionaireDetail() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <Badge variant="outline" className="text-xs font-medium">
-                                {contractTypeLabels[contract.type]}
+                                {contractTypeLabels[contract.type as ContractType] || 'Other'}
                               </Badge>
                               <Badge className={cn(sConfig.bgColor, sConfig.color, "capitalize text-xs")}>
                                 {contract.status}

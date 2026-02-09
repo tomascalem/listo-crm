@@ -22,9 +22,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollText, MapPin } from "lucide-react"
+import { useVenues } from "@/queries/venues"
+import { useCreateContract } from "@/queries/contracts"
 import {
-  getVenuesByOperatorId,
-  getVenuesByConcessionaireId,
   type ContractType,
   type ContractStatus,
 } from "@/lib/mock-data"
@@ -52,29 +52,58 @@ const contractStatuses: { value: ContractStatus; label: string }[] = [
 
 export function AddContractModal({ trigger, entityType, entityId, entityName }: AddContractModalProps) {
   const [open, setOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [name, setName] = useState("")
+  const [contractType, setContractType] = useState<ContractType | "">("")
+  const [contractStatus, setContractStatus] = useState<ContractStatus>("pending")
+  const [effectiveDate, setEffectiveDate] = useState("")
+  const [expirationDate, setExpirationDate] = useState("")
+  const [url, setUrl] = useState("")
+  const [description, setDescription] = useState("")
   const [applyToAll, setApplyToAll] = useState(true)
   const [selectedVenues, setSelectedVenues] = useState<string[]>([])
   const [hasExpiration, setHasExpiration] = useState(true)
 
+  const { data: allVenues = [] } = useVenues()
+  const createContract = useCreateContract()
+
   // Get venues for operator/concessionaire
   const venues = entityType === "operator"
-    ? getVenuesByOperatorId(entityId)
+    ? allVenues.filter((v: any) => v.operatorId === entityId)
     : entityType === "concessionaire"
-    ? getVenuesByConcessionaireId(entityId)
+    ? allVenues.filter((v: any) => v.concessionaires?.some((c: any) => c.id === entityId))
     : []
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsSubmitting(false)
-    setOpen(false)
-    // Reset form
-    setApplyToAll(true)
-    setSelectedVenues([])
-    setHasExpiration(true)
+    try {
+      await createContract.mutateAsync({
+        name,
+        type: contractType,
+        status: contractStatus,
+        entityType,
+        entityId,
+        effectiveDate,
+        expirationDate: hasExpiration ? expirationDate : undefined,
+        url: url || undefined,
+        description: description || undefined,
+        isInheritable: applyToAll,
+        venueIds: !applyToAll && selectedVenues.length > 0 ? selectedVenues : undefined,
+      })
+      // Reset form
+      setName("")
+      setContractType("")
+      setContractStatus("pending")
+      setEffectiveDate("")
+      setExpirationDate("")
+      setUrl("")
+      setDescription("")
+      setApplyToAll(true)
+      setSelectedVenues([])
+      setHasExpiration(true)
+      setOpen(false)
+    } catch (error) {
+      console.error("Failed to create contract:", error)
+    }
   }
 
   const toggleVenue = (venueId: string) => {
@@ -114,6 +143,8 @@ export function AddContractModal({ trigger, entityType, entityId, entityName }: 
             <Input
               id="contract-name"
               placeholder="e.g., Master Service Agreement 2025"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               required
             />
           </div>
@@ -122,7 +153,7 @@ export function AddContractModal({ trigger, entityType, entityId, entityName }: 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="contract-type">Contract Type *</Label>
-              <Select required>
+              <Select value={contractType} onValueChange={(v) => setContractType(v as ContractType)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
@@ -137,7 +168,7 @@ export function AddContractModal({ trigger, entityType, entityId, entityName }: 
             </div>
             <div className="space-y-2">
               <Label htmlFor="contract-status">Status *</Label>
-              <Select defaultValue="pending">
+              <Select value={contractStatus} onValueChange={(v) => setContractStatus(v as ContractStatus)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
@@ -160,6 +191,8 @@ export function AddContractModal({ trigger, entityType, entityId, entityName }: 
                 <Input
                   id="effective-date"
                   type="date"
+                  value={effectiveDate}
+                  onChange={(e) => setEffectiveDate(e.target.value)}
                   required
                 />
               </div>
@@ -180,6 +213,8 @@ export function AddContractModal({ trigger, entityType, entityId, entityName }: 
                 <Input
                   id="expiration-date"
                   type="date"
+                  value={expirationDate}
+                  onChange={(e) => setExpirationDate(e.target.value)}
                   disabled={!hasExpiration}
                   className={!hasExpiration ? "opacity-50" : ""}
                 />
@@ -194,6 +229,8 @@ export function AddContractModal({ trigger, entityType, entityId, entityName }: 
               id="contract-url"
               type="url"
               placeholder="https://drive.google.com/file/d/..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
               Link to the contract document in Google Drive, Dropbox, etc.
@@ -207,6 +244,8 @@ export function AddContractModal({ trigger, entityType, entityId, entityName }: 
               id="contract-description"
               placeholder="Brief description of the contract terms..."
               className="min-h-[80px]"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
             />
           </div>
 
@@ -236,7 +275,7 @@ export function AddContractModal({ trigger, entityType, entityId, entityName }: 
                 <div className="space-y-3">
                   <Label className="text-sm">Select venues:</Label>
                   <div className="max-h-[200px] overflow-y-auto space-y-2 rounded-md border border-border p-3 bg-card">
-                    {venues.map((venue) => (
+                    {venues.map((venue: any) => (
                       <div
                         key={venue.id}
                         className="flex items-center gap-3 p-2 rounded-md hover:bg-secondary/50 transition-colors"
@@ -275,8 +314,8 @@ export function AddContractModal({ trigger, entityType, entityId, entityName }: 
             <Button type="button" variant="outline" onClick={() => setOpen(false)} className="bg-transparent">
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Adding..." : "Add Contract"}
+            <Button type="submit" disabled={createContract.isPending}>
+              {createContract.isPending ? "Adding..." : "Add Contract"}
             </Button>
           </div>
         </form>

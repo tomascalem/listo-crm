@@ -32,19 +32,10 @@ import {
 } from "@/components/ui/collapsible"
 import { Bell, Search, MoreHorizontal, MapPin, Users, Building2, ChefHat, ExternalLink, ChevronRight, ChevronDown, List, Landmark, TreePine, Drama, Building, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
-import {
-  venues,
-  operators,
-  concessionaires,
-  getOperatorById,
-  getConcessionaireById,
-  getVenuesByOperatorId,
-  getVenuesByConcessionaireId,
-  type VenueStatus,
-  type VenueStage,
-  type VenueType,
-  type Venue,
-} from "@/lib/mock-data"
+import { type VenueStatus, type VenueStage, type VenueType, type Venue } from "@/lib/mock-data"
+import { useVenues } from "@/queries/venues"
+import { useOperators } from "@/queries/operators"
+import { useConcessionaires } from "@/queries/concessionaires"
 
 type ViewMode = "all" | "by-operator" | "by-concessionaire"
 
@@ -101,7 +92,7 @@ function formatCapacity(capacity?: number) {
 function VenueRow({ venue }: { venue: Venue }) {
   const status = statusConfig[venue.status]
   const stage = stageConfig[venue.stage]
-  const typeConfig = venueTypeConfig[venue.type]
+  const typeConfig = venueTypeConfig[venue.type] || venueTypeConfig.other
   const TypeIcon = typeConfig.icon
 
   return (
@@ -213,8 +204,13 @@ export default function Venues() {
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [viewMode, setViewMode] = useState<ViewMode>("all")
 
+  // Fetch data from API
+  const { data: venues = [], isLoading: venuesLoading } = useVenues()
+  const { data: operators = [] } = useOperators()
+  const { data: concessionaires = [] } = useConcessionaires()
+
   const filteredVenues = useMemo(() => {
-    return venues.filter((venue) => {
+    return venues.filter((venue: any) => {
       const matchesSearch = venue.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         venue.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
         venue.state.toLowerCase().includes(searchQuery.toLowerCase())
@@ -224,60 +220,78 @@ export default function Venues() {
 
       return matchesSearch && matchesStatus && matchesType
     })
-  }, [searchQuery, statusFilter, typeFilter])
+  }, [venues, searchQuery, statusFilter, typeFilter])
 
   const operatorsWithVenues = useMemo(() => {
-    return operators.map((op) => {
-      let opVenues = getVenuesByOperatorId(op.id)
+    return operators.map((op: any) => {
+      let opVenues = venues.filter((v: any) => v.operatorId === op.id)
 
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
-        opVenues = opVenues.filter(v =>
+        opVenues = opVenues.filter((v: any) =>
           v.name.toLowerCase().includes(query) ||
           v.city.toLowerCase().includes(query)
         )
       }
       if (statusFilter !== "all") {
-        opVenues = opVenues.filter(v => v.status === statusFilter)
+        opVenues = opVenues.filter((v: any) => v.status === statusFilter)
       }
       if (typeFilter !== "all") {
-        opVenues = opVenues.filter(v => v.type === typeFilter)
+        opVenues = opVenues.filter((v: any) => v.type === typeFilter)
       }
 
-      const totalValue = opVenues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
+      const totalValue = opVenues.reduce((sum: number, v: any) => sum + (v.dealValue || 0), 0)
       return { ...op, venues: opVenues, totalValue }
-    }).filter(op => op.venues.length > 0 || !searchQuery)
-  }, [searchQuery, statusFilter, typeFilter])
+    }).filter((op: any) => op.venues.length > 0 || !searchQuery)
+  }, [venues, operators, searchQuery, statusFilter, typeFilter])
 
   const concessionairesWithVenues = useMemo(() => {
-    return concessionaires.map((con) => {
-      let conVenues = getVenuesByConcessionaireId(con.id)
+    return concessionaires.map((con: any) => {
+      // Find venues that have this concessionaire
+      let conVenues = venues.filter((v: any) =>
+        v.concessionaires?.some((c: any) => c.id === con.id) ||
+        v.concessionaireIds?.includes(con.id)
+      )
 
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
-        conVenues = conVenues.filter(v =>
+        conVenues = conVenues.filter((v: any) =>
           v.name.toLowerCase().includes(query) ||
           v.city.toLowerCase().includes(query)
         )
       }
       if (statusFilter !== "all") {
-        conVenues = conVenues.filter(v => v.status === statusFilter)
+        conVenues = conVenues.filter((v: any) => v.status === statusFilter)
       }
       if (typeFilter !== "all") {
-        conVenues = conVenues.filter(v => v.type === typeFilter)
+        conVenues = conVenues.filter((v: any) => v.type === typeFilter)
       }
 
-      const totalValue = conVenues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
+      const totalValue = conVenues.reduce((sum: number, v: any) => sum + (v.dealValue || 0), 0)
       return { ...con, venues: conVenues, totalValue }
-    }).filter(con => con.venues.length > 0 || !searchQuery)
-  }, [searchQuery, statusFilter, typeFilter])
+    }).filter((con: any) => con.venues.length > 0 || !searchQuery)
+  }, [venues, concessionaires, searchQuery, statusFilter, typeFilter])
 
   const stats = useMemo(() => ({
     total: venues.length,
-    clients: venues.filter(v => v.status === "client").length,
-    prospects: venues.filter(v => v.status === "prospect").length,
-    pipeline: venues.reduce((sum, v) => sum + (v.dealValue || 0) * (v.probability || 0) / 100, 0),
-  }), [])
+    clients: venues.filter((v: any) => v.status === "client").length,
+    prospects: venues.filter((v: any) => v.status === "prospect").length,
+    pipeline: venues.reduce((sum: number, v: any) => sum + (v.dealValue || 0) * (v.probability || 0) / 100, 0),
+  }), [venues])
+
+  if (venuesLoading) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 lg:pl-64 flex items-center justify-center">
+          <div className="text-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading venues...</p>
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -417,12 +431,12 @@ export default function Venues() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredVenues.map((venue) => {
-                    const operator = getOperatorById(venue.operatorId)
-                    const venueConcessionaires = venue.concessionaireIds.map(id => getConcessionaireById(id)).filter(Boolean)
-                    const stage = stageConfig[venue.stage]
-                    const status = statusConfig[venue.status]
-                    const typeConfig = venueTypeConfig[venue.type]
+                  {filteredVenues.map((venue: any) => {
+                    const operator = venue.operator
+                    const venueConcessionaires = venue.concessionaires || []
+                    const stage = stageConfig[venue.stage as VenueStage]
+                    const status = statusConfig[venue.status as VenueStatus]
+                    const typeConfig = venueTypeConfig[venue.type as VenueType] || venueTypeConfig.other
                     const TypeIcon = typeConfig.icon
 
                     return (
@@ -453,7 +467,7 @@ export default function Venues() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <TypeIcon className={cn("h-4 w-4", typeConfig.color)} />
-                            <span className="text-sm">{typeLabels[venue.type]}</span>
+                            <span className="text-sm">{typeLabels[venue.type as VenueType]}</span>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -468,7 +482,7 @@ export default function Venues() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {venueConcessionaires.slice(0, 2).map((con) => con && (
+                            {venueConcessionaires.slice(0, 2).map((con: any) => con && (
                               <Link key={con.id} to={`/concessionaires/${con.id}`}>
                                 <Badge variant="outline" className="text-xs cursor-pointer hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors">
                                   {con.name.split(' ')[0]}
@@ -484,13 +498,13 @@ export default function Venues() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <div className={cn("h-2 w-2 rounded-full", stage.color)} />
-                            <span className="text-sm">{stage.label}</span>
+                            <div className={cn("h-2 w-2 rounded-full", stage?.color)} />
+                            <span className="text-sm">{stage?.label}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge className={cn("text-xs", status.className)}>
-                            {status.label}
+                          <Badge className={cn("text-xs", status?.className)}>
+                            {status?.label}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -535,7 +549,7 @@ export default function Venues() {
                 {operators.length} operators · Click to expand and see venues
               </p>
               <div className="space-y-3">
-                {operatorsWithVenues.map((op) => (
+                {operatorsWithVenues.map((op: any) => (
                   <TreeItem
                     key={op.id}
                     name={op.name}
@@ -557,7 +571,7 @@ export default function Venues() {
                 {concessionaires.length} concessionaires · Click to expand and see venues
               </p>
               <div className="space-y-3">
-                {concessionairesWithVenues.map((con) => (
+                {concessionairesWithVenues.map((con: any) => (
                   <TreeItem
                     key={con.id}
                     name={con.name}

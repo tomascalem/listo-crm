@@ -1,4 +1,3 @@
-
 import React from "react"
 
 import { useState } from "react"
@@ -15,7 +14,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Users } from "lucide-react"
-import { venues } from "@/lib/mock-data"
+import { useVenues } from "@/queries/venues"
+import { useCreateContact } from "@/queries/contacts"
 
 interface AddContactModalProps {
   trigger?: React.ReactNode
@@ -24,15 +24,43 @@ interface AddContactModalProps {
 
 export function AddContactModal({ trigger, venueIds }: AddContactModalProps) {
   const [open, setOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [name, setName] = useState("")
+  const [role, setRole] = useState("")
+  const [email, setEmail] = useState("")
+  const [phone, setPhone] = useState("")
+  const [linkedIn, setLinkedIn] = useState("")
+  const [isPrimary, setIsPrimary] = useState(false)
   const [selectedVenues, setSelectedVenues] = useState<string[]>(venueIds || [])
+  const { data: venues = [] } = useVenues()
+  const createContact = useCreateContact()
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsSubmitting(false)
-    setOpen(false)
+    try {
+      // Generate avatar from initials
+      const avatar = name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
+      await createContact.mutateAsync({
+        name,
+        email,
+        phone: phone || undefined,
+        role,
+        isPrimary,
+        avatar,
+        linkedIn: linkedIn || undefined,
+        venueIds: selectedVenues,
+      })
+      // Reset form
+      setName("")
+      setRole("")
+      setEmail("")
+      setPhone("")
+      setLinkedIn("")
+      setIsPrimary(false)
+      setSelectedVenues(venueIds || [])
+      setOpen(false)
+    } catch (error) {
+      console.error("Failed to create contact:", error)
+    }
   }
 
   const toggleVenue = (venueId: string) => {
@@ -65,25 +93,56 @@ export function AddContactModal({ trigger, venueIds }: AddContactModalProps) {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="contact-name">Full Name *</Label>
-              <Input id="contact-name" placeholder="e.g., John Smith" required />
+              <Input
+                id="contact-name"
+                placeholder="e.g., John Smith"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="contact-role">Role / Title *</Label>
-              <Input id="contact-role" placeholder="e.g., VP of Operations" required />
+              <Input
+                id="contact-role"
+                placeholder="e.g., VP of Operations"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="contact-email">Email *</Label>
-              <Input id="contact-email" type="email" placeholder="john@company.com" required />
+              <Input
+                id="contact-email"
+                type="email"
+                placeholder="john@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="contact-phone">Phone</Label>
-              <Input id="contact-phone" type="tel" placeholder="+1 (555) 123-4567" />
+              <Input
+                id="contact-phone"
+                type="tel"
+                placeholder="+1 (555) 123-4567"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="contact-linkedin">LinkedIn Profile</Label>
-            <Input id="contact-linkedin" type="url" placeholder="https://linkedin.com/in/username" />
+            <Input
+              id="contact-linkedin"
+              type="url"
+              placeholder="https://linkedin.com/in/username"
+              value={linkedIn}
+              onChange={(e) => setLinkedIn(e.target.value)}
+            />
           </div>
 
           <div className="space-y-3">
@@ -92,7 +151,7 @@ export function AddContactModal({ trigger, venueIds }: AddContactModalProps) {
               Select the venues this contact is associated with. Contacts can be shared across multiple venues.
             </p>
             <div className="max-h-48 overflow-y-auto border border-border rounded-lg p-3 space-y-2">
-              {venues.map((venue) => (
+              {venues.map((venue: any) => (
                 <div
                   key={venue.id}
                   className="flex items-center gap-3 p-2 rounded hover:bg-muted/50 cursor-pointer"
@@ -112,7 +171,11 @@ export function AddContactModal({ trigger, venueIds }: AddContactModalProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <Checkbox id="primary-contact" />
+            <Checkbox
+              id="primary-contact"
+              checked={isPrimary}
+              onCheckedChange={(checked) => setIsPrimary(checked === true)}
+            />
             <Label htmlFor="primary-contact" className="text-sm font-normal cursor-pointer">
               Mark as primary contact for selected venues
             </Label>
@@ -124,10 +187,10 @@ export function AddContactModal({ trigger, venueIds }: AddContactModalProps) {
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || selectedVenues.length === 0}
+              disabled={createContact.isPending || selectedVenues.length === 0}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              {isSubmitting ? "Creating..." : "Create Contact"}
+              {createContact.isPending ? "Creating..." : "Create Contact"}
             </Button>
           </div>
         </form>

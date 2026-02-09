@@ -1,11 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import {
-  venues,
-  getVenueById,
-  getContactsByVenueId,
-  getInteractionsByVenueId,
-  getTodosByVenueId,
-} from '../lib/mock-data'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { venuesApi } from '../lib/api'
 
 export const venueKeys = {
   all: ['venues'] as const,
@@ -18,27 +12,17 @@ export const venueKeys = {
   todos: (id: string) => [...venueKeys.detail(id), 'todos'] as const,
 }
 
-export function useVenues(filters?: { status?: string; type?: string; search?: string }) {
+export function useVenues(filters?: { status?: string; type?: string; stage?: string; search?: string }) {
   return useQuery({
     queryKey: venueKeys.list(filters || {}),
     queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 100))
-
-      let result = [...venues]
-      if (filters?.status && filters.status !== 'all') {
-        result = result.filter(v => v.status === filters.status)
-      }
-      if (filters?.type && filters.type !== 'all') {
-        result = result.filter(v => v.type === filters.type)
-      }
-      if (filters?.search) {
-        const query = filters.search.toLowerCase()
-        result = result.filter(v =>
-          v.name.toLowerCase().includes(query) ||
-          v.city.toLowerCase().includes(query)
-        )
-      }
-      return result
+      const response = await venuesApi.list({
+        status: filters?.status !== 'all' ? filters?.status : undefined,
+        type: filters?.type !== 'all' ? filters?.type : undefined,
+        stage: filters?.stage !== 'all' ? filters?.stage : undefined,
+        search: filters?.search || undefined,
+      })
+      return response.items
     },
   })
 }
@@ -46,10 +30,7 @@ export function useVenues(filters?: { status?: string; type?: string; search?: s
 export function useVenue(id: string) {
   return useQuery({
     queryKey: venueKeys.detail(id),
-    queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return getVenueById(id)
-    },
+    queryFn: () => venuesApi.getById(id),
     enabled: !!id,
   })
 }
@@ -57,10 +38,7 @@ export function useVenue(id: string) {
 export function useVenueContacts(venueId: string) {
   return useQuery({
     queryKey: venueKeys.contacts(venueId),
-    queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return getContactsByVenueId(venueId)
-    },
+    queryFn: () => venuesApi.getContacts(venueId),
     enabled: !!venueId,
   })
 }
@@ -68,10 +46,7 @@ export function useVenueContacts(venueId: string) {
 export function useVenueInteractions(venueId: string) {
   return useQuery({
     queryKey: venueKeys.interactions(venueId),
-    queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return getInteractionsByVenueId(venueId)
-    },
+    queryFn: () => venuesApi.getInteractions(venueId),
     enabled: !!venueId,
   })
 }
@@ -79,10 +54,49 @@ export function useVenueInteractions(venueId: string) {
 export function useVenueTodos(venueId: string) {
   return useQuery({
     queryKey: venueKeys.todos(venueId),
-    queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return getTodosByVenueId(venueId)
-    },
+    queryFn: () => venuesApi.getTodos(venueId),
     enabled: !!venueId,
+  })
+}
+
+export function useCreateVenue() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: any) => venuesApi.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: venueKeys.all })
+    },
+  })
+}
+
+export function useUpdateVenue() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => venuesApi.update(id, data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: venueKeys.detail(id) })
+      queryClient.invalidateQueries({ queryKey: venueKeys.lists() })
+    },
+  })
+}
+
+export function useUpdateVenueStage() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, stage }: { id: string; stage: string }) => venuesApi.updateStage(id, stage),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: venueKeys.detail(id) })
+      queryClient.invalidateQueries({ queryKey: venueKeys.lists() })
+    },
+  })
+}
+
+export function useDeleteVenue() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => venuesApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: venueKeys.all })
+    },
   })
 }

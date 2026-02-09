@@ -1,11 +1,10 @@
-
 import { useState } from "react"
-import { Check, Circle, AlertCircle } from "lucide-react"
+import { Check, Circle, AlertCircle, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { todos, getVenueById, getContactById, getUserById } from "@/lib/mock-data"
+import { useTodos } from "@/queries/todos"
 import type { Todo } from "@/lib/mock-data"
 
 function PriorityIndicator({ priority }: { priority: Todo["priority"] }) {
@@ -32,10 +31,11 @@ function formatDueDate(dateStr: string) {
 
 export function UpcomingTasks() {
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set())
+  const { data: todos = [], isLoading } = useTodos()
 
   const upcomingTodos = todos
-    .filter((t) => !t.completed && !completedTasks.has(t.id))
-    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+    .filter((t: any) => !t.completed && !completedTasks.has(t.id))
+    .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     .slice(0, 5)
 
   const toggleTask = (taskId: string) => {
@@ -50,15 +50,29 @@ export function UpcomingTasks() {
     })
   }
 
+  if (isLoading) {
+    return (
+      <Card className="border-border bg-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-medium text-card-foreground">Upcoming Tasks</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card className="border-border bg-card">
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-medium text-card-foreground">Upcoming Tasks</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {upcomingTodos.map((todo) => {
-          const venue = todo.venueId ? getVenueById(todo.venueId) : null
-          const contact = todo.contactId ? getContactById(todo.contactId) : null
+        {upcomingTodos.map((todo: any) => {
+          // Use expanded relations from API
+          const venue = todo.venue || null
+          const contact = todo.contact || null
           const dueInfo = formatDueDate(todo.dueDate)
           const isCompleted = completedTasks.has(todo.id)
 

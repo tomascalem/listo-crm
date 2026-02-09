@@ -26,25 +26,21 @@ import {
   Presentation,
   FolderOpen,
   ScrollText,
-  Link as LinkIcon,
   Share2,
   Calendar,
   Clock,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import {
-  getOperatorById,
-  getVenuesByOperatorId,
-  getContactsByOperatorId,
-  getInteractionsByOperatorId,
-  getFilesByEntityId,
-  getContractsByEntityId,
-  type VenueStatus,
-  type VenueType,
-  type FileType,
-  type ContractType,
-  type ContractStatus,
-} from "@/lib/mock-data"
+import { useOperator, useOperatorVenues, useOperatorContacts, useOperatorInteractions } from "@/queries/operators"
+import { useFiles } from "@/queries/files"
+import { useContracts } from "@/queries/contracts"
+
+type VenueType = "stadium" | "arena" | "amphitheater" | "theater" | "convention-center" | "other"
+type VenueStatus = "client" | "prospect" | "negotiating" | "churned"
+type FileType = "deck" | "one-pager" | "proposal" | "report" | "other"
+type ContractType = "msa" | "sow" | "nda" | "other"
+type ContractStatus = "active" | "pending" | "expired" | "terminated"
 
 // File type icons and colors
 const fileTypeConfig: Record<FileType, { icon: typeof FileText; color: string; label: string }> = {
@@ -72,18 +68,23 @@ const contractStatusConfig: Record<ContractStatus, { color: string; bgColor: str
 }
 
 // Helper to group files by month
-function groupFilesByMonth<T extends { date: string }>(files: T[]): { month: string; files: T[] }[] {
+function groupFilesByMonth<T extends { createdAt?: string; date?: string }>(files: T[]): { month: string; files: T[] }[] {
   const groups: Record<string, T[]> = {}
 
   files.forEach(file => {
-    const date = new Date(file.date)
+    const dateStr = (file as any).createdAt || (file as any).date || new Date().toISOString()
+    const date = new Date(dateStr)
     const monthKey = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
     if (!groups[monthKey]) groups[monthKey] = []
     groups[monthKey].push(file)
   })
 
   return Object.entries(groups)
-    .sort((a, b) => new Date(b[1][0].date).getTime() - new Date(a[1][0].date).getTime())
+    .sort((a, b) => {
+      const dateA = (a[1][0] as any).createdAt || (a[1][0] as any).date
+      const dateB = (b[1][0] as any).createdAt || (b[1][0] as any).date
+      return new Date(dateB).getTime() - new Date(dateA).getTime()
+    })
     .map(([month, files]) => ({ month, files }))
 }
 
@@ -115,7 +116,23 @@ function formatCurrency(amount: number) {
 
 export default function OperatorDetail() {
   const { id } = useParams<{ id: string }>()
-  const operator = id ? getOperatorById(id) : null
+  const { data: operator, isLoading } = useOperator(id || '')
+  const { data: venues = [] } = useOperatorVenues(id || '')
+  const { data: contacts = [] } = useOperatorContacts(id || '')
+  const { data: interactions = [] } = useOperatorInteractions(id || '')
+  const { data: files = [] } = useFiles('operator', id || '')
+  const { data: operatorContracts = [] } = useContracts('operator', id || '')
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 pl-64 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </main>
+      </div>
+    )
+  }
 
   if (!operator) {
     return (
@@ -133,12 +150,7 @@ export default function OperatorDetail() {
     )
   }
 
-  const venues = getVenuesByOperatorId(operator.id)
-  const contacts = getContactsByOperatorId(operator.id)
-  const interactions = getInteractionsByOperatorId(operator.id)
-  const files = getFilesByEntityId("operator", operator.id)
-  const operatorContracts = getContractsByEntityId("operator", operator.id)
-  const totalValue = venues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
+  const totalValue = venues.reduce((sum: number, v: any) => sum + (v.dealValue || 0), 0)
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -229,9 +241,9 @@ export default function OperatorDetail() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
-                        {venues.slice(0, 3).map((venue) => {
-                          const status = statusConfig[venue.status]
-                          const typeConfig = venueTypeConfig[venue.type]
+                        {venues.slice(0, 3).map((venue: any) => {
+                          const status = statusConfig[venue.status as VenueStatus] || statusConfig.prospect
+                          const typeConfig = venueTypeConfig[venue.type as VenueType] || venueTypeConfig.other
                           const TypeIcon = typeConfig.icon
 
                           return (
@@ -272,9 +284,9 @@ export default function OperatorDetail() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {venues.map((venue) => {
-                      const status = statusConfig[venue.status]
-                      const typeConfig = venueTypeConfig[venue.type]
+                    {venues.map((venue: any) => {
+                      const status = statusConfig[venue.status as VenueStatus] || statusConfig.prospect
+                      const typeConfig = venueTypeConfig[venue.type as VenueType] || venueTypeConfig.other
                       const TypeIcon = typeConfig.icon
 
                       return (
@@ -306,10 +318,10 @@ export default function OperatorDetail() {
                     {contacts.length === 0 ? (
                       <p className="text-muted-foreground text-center py-4">No contacts associated with this operator</p>
                     ) : (
-                      contacts.map((contact) => (
+                      contacts.map((contact: any) => (
                         <Link key={contact.id} to={`/contacts/${contact.id}`} className="flex items-center gap-4 p-4 rounded-lg border hover:bg-secondary/50 transition-colors">
                           <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary border border-primary/20">
-                            {contact.avatar || contact.name.split(' ').map(n => n[0]).join('')}
+                            {contact.avatar || contact.name.split(' ').map((n: string) => n[0]).join('')}
                           </div>
                           <div className="flex-1">
                             <p className="font-medium">{contact.name}</p>
@@ -348,13 +360,13 @@ export default function OperatorDetail() {
                         <span className="text-sm font-medium text-muted-foreground">{month}</span>
                       </div>
                       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                        {monthFiles.map((file) => {
-                          const typeConfig = fileTypeConfig[file.type]
+                        {monthFiles.map((file: any) => {
+                          const typeConfig = fileTypeConfig[file.type as FileType] || fileTypeConfig.other
                           const FileIcon = typeConfig.icon
                           return (
                             <a
                               key={file.id}
-                              href={file.url}
+                              href={file.url || '#'}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="group relative bg-card border border-border rounded-xl p-4 hover:shadow-lg hover:border-chart-2/30 transition-all duration-200"
@@ -389,7 +401,7 @@ export default function OperatorDetail() {
                                       {typeConfig.label}
                                     </Badge>
                                     <span className="text-xs text-muted-foreground">
-                                      {new Date(file.date).toLocaleDateString()}
+                                      {new Date(file.createdAt || file.date).toLocaleDateString()}
                                     </span>
                                   </div>
                                 </div>
@@ -440,8 +452,8 @@ export default function OperatorDetail() {
 
               {operatorContracts.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2">
-                  {operatorContracts.map((contract) => {
-                    const sConfig = contractStatusConfig[contract.status]
+                  {operatorContracts.map((contract: any) => {
+                    const sConfig = contractStatusConfig[contract.status as ContractStatus] || contractStatusConfig.pending
                     const isExpiringSoon = contract.expirationDate &&
                       new Date(contract.expirationDate).getTime() - Date.now() < 90 * 24 * 60 * 60 * 1000 &&
                       contract.status === 'active'
@@ -449,7 +461,7 @@ export default function OperatorDetail() {
                     return (
                       <a
                         key={contract.id}
-                        href={contract.url}
+                        href={contract.url || '#'}
                         target="_blank"
                         rel="noopener noreferrer"
                         className={cn(
@@ -490,7 +502,7 @@ export default function OperatorDetail() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <Badge variant="outline" className="text-xs font-medium">
-                                {contractTypeLabels[contract.type]}
+                                {contractTypeLabels[contract.type as ContractType] || contract.type}
                               </Badge>
                               <Badge className={cn(sConfig.bgColor, sConfig.color, "capitalize text-xs")}>
                                 {contract.status}

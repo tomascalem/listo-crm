@@ -21,7 +21,9 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, MapPin } from "lucide-react"
-import { operators, concessionaires } from "@/lib/mock-data"
+import { useOperators } from "@/queries/operators"
+import { useConcessionaires } from "@/queries/concessionaires"
+import { useCreateVenue } from "@/queries/venues"
 
 interface AddVenueModalProps {
   trigger?: React.ReactNode
@@ -30,15 +32,57 @@ interface AddVenueModalProps {
 
 export function AddVenueModal({ trigger, operatorId }: AddVenueModalProps) {
   const [open, setOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [name, setName] = useState("")
+  const [type, setType] = useState("")
+  const [address, setAddress] = useState("")
+  const [city, setCity] = useState("")
+  const [state, setState] = useState("")
+  const [capacity, setCapacity] = useState("")
+  const [selectedOperatorId, setSelectedOperatorId] = useState(operatorId || "")
   const [selectedConcessionaires, setSelectedConcessionaires] = useState<string[]>([])
+  const [status, setStatus] = useState("prospect")
+  const [stage, setStage] = useState("lead")
+  const [dealValue, setDealValue] = useState("")
+  const [notes, setNotes] = useState("")
+
+  const { data: operators = [] } = useOperators()
+  const { data: concessionaires = [] } = useConcessionaires()
+  const createVenue = useCreateVenue()
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsSubmitting(false)
-    setOpen(false)
+    try {
+      await createVenue.mutateAsync({
+        name,
+        type,
+        address: address || undefined,
+        city,
+        state,
+        capacity: capacity ? parseInt(capacity) : undefined,
+        operatorId: selectedOperatorId,
+        concessionaireIds: selectedConcessionaires.length > 0 ? selectedConcessionaires : undefined,
+        status,
+        stage,
+        dealValue: dealValue ? parseInt(dealValue) : undefined,
+        notes: notes || undefined,
+      })
+      // Reset form
+      setName("")
+      setType("")
+      setAddress("")
+      setCity("")
+      setState("")
+      setCapacity("")
+      setSelectedOperatorId(operatorId || "")
+      setSelectedConcessionaires([])
+      setStatus("prospect")
+      setStage("lead")
+      setDealValue("")
+      setNotes("")
+      setOpen(false)
+    } catch (error) {
+      console.error("Failed to create venue:", error)
+    }
   }
 
   const toggleConcessionaire = (id: string) => {
@@ -74,11 +118,17 @@ export function AddVenueModal({ trigger, operatorId }: AddVenueModalProps) {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="venue-name">Venue Name *</Label>
-              <Input id="venue-name" placeholder="e.g., Madison Square Garden" required />
+              <Input
+                id="venue-name"
+                placeholder="e.g., Madison Square Garden"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="venue-type">Venue Type *</Label>
-              <Select>
+              <Select value={type} onValueChange={setType} required>
                 <SelectTrigger>
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
@@ -97,21 +147,44 @@ export function AddVenueModal({ trigger, operatorId }: AddVenueModalProps) {
           {/* Location */}
           <div className="space-y-2">
             <Label htmlFor="address">Address</Label>
-            <Input id="address" placeholder="Street address" />
+            <Input
+              id="address"
+              placeholder="Street address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="city">City *</Label>
-              <Input id="city" placeholder="City" required />
+              <Input
+                id="city"
+                placeholder="City"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="state">State *</Label>
-              <Input id="state" placeholder="e.g., NY" required />
+              <Input
+                id="state"
+                placeholder="e.g., NY"
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="capacity">Capacity</Label>
-              <Input id="capacity" type="number" placeholder="e.g., 20000" />
+              <Input
+                id="capacity"
+                type="number"
+                placeholder="e.g., 20000"
+                value={capacity}
+                onChange={(e) => setCapacity(e.target.value)}
+              />
             </div>
           </div>
 
@@ -121,12 +194,12 @@ export function AddVenueModal({ trigger, operatorId }: AddVenueModalProps) {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="operator">Operator *</Label>
-                <Select defaultValue={operatorId}>
+                <Select value={selectedOperatorId} onValueChange={setSelectedOperatorId}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select operator" />
                   </SelectTrigger>
                   <SelectContent>
-                    {operators.map((op) => (
+                    {operators.map((op: any) => (
                       <SelectItem key={op.id} value={op.id}>{op.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -138,7 +211,7 @@ export function AddVenueModal({ trigger, operatorId }: AddVenueModalProps) {
               <div className="space-y-2">
                 <Label>Concessionaire(s)</Label>
                 <div className="flex flex-wrap gap-2">
-                  {concessionaires.map((con) => (
+                  {concessionaires.map((con: any) => (
                     <button
                       key={con.id}
                       type="button"
@@ -164,7 +237,7 @@ export function AddVenueModal({ trigger, operatorId }: AddVenueModalProps) {
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="status">Status *</Label>
-              <Select defaultValue="prospect">
+              <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -178,7 +251,7 @@ export function AddVenueModal({ trigger, operatorId }: AddVenueModalProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="stage">Pipeline Stage *</Label>
-              <Select defaultValue="lead">
+              <Select value={stage} onValueChange={setStage}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -195,7 +268,13 @@ export function AddVenueModal({ trigger, operatorId }: AddVenueModalProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="deal-value">Deal Value ($)</Label>
-              <Input id="deal-value" type="number" placeholder="e.g., 250000" />
+              <Input
+                id="deal-value"
+                type="number"
+                placeholder="e.g., 250000"
+                value={dealValue}
+                onChange={(e) => setDealValue(e.target.value)}
+              />
             </div>
           </div>
 
@@ -205,6 +284,8 @@ export function AddVenueModal({ trigger, operatorId }: AddVenueModalProps) {
               id="venue-notes"
               placeholder="Add any notes about this venue..."
               className="min-h-[80px]"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
             />
           </div>
 
@@ -212,8 +293,8 @@ export function AddVenueModal({ trigger, operatorId }: AddVenueModalProps) {
             <Button type="button" variant="outline" onClick={() => setOpen(false)} className="bg-transparent">
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Creating..." : "Create Venue"}
+            <Button type="submit" disabled={createVenue.isPending}>
+              {createVenue.isPending ? "Creating..." : "Create Venue"}
             </Button>
           </div>
         </form>

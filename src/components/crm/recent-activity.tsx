@@ -1,7 +1,7 @@
-import { Phone, Video, Mail, Calendar, FileText } from "lucide-react"
+import { Phone, Video, Mail, Calendar, FileText, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { interactions, getContactById, getVenueById, getUserById } from "@/lib/mock-data"
+import { useInteractions } from "@/queries/interactions"
 import type { InteractionType } from "@/lib/mock-data"
 
 function getInteractionIcon(type: InteractionType) {
@@ -32,9 +32,24 @@ function formatRelativeTime(dateStr: string) {
 }
 
 export function RecentActivity() {
-  const recentInteractions = interactions
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  const { data: interactions = [], isLoading } = useInteractions()
+
+  const recentInteractions = [...interactions]
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5)
+
+  if (isLoading) {
+    return (
+      <Card className="border-border bg-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-medium text-card-foreground">Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card className="border-border bg-card">
@@ -42,10 +57,11 @@ export function RecentActivity() {
         <CardTitle className="text-base font-medium text-card-foreground">Recent Activity</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {recentInteractions.map((interaction) => {
-          const contact = getContactById(interaction.contactId)
-          const venue = getVenueById(interaction.venueId)
-          const user = getUserById(interaction.userId)
+        {recentInteractions.map((interaction: any) => {
+          // Use expanded relations from API
+          const contact = interaction.contact || null
+          const venue = interaction.venue || null
+          const user = interaction.user || null
 
           return (
             <div key={interaction.id} className="flex items-start gap-3">

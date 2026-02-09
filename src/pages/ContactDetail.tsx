@@ -18,16 +18,14 @@ import {
   Drama,
   Building,
   Star,
-  ExternalLink
+  ExternalLink,
+  Loader2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import {
-  getContactById,
-  getVenueById,
-  getOperatorById,
-  interactions,
-  type VenueType,
-} from "@/lib/mock-data"
+import { useContact } from "@/queries/contacts"
+import { useInteractionsByContact } from "@/queries/interactions"
+
+type VenueType = "stadium" | "arena" | "amphitheater" | "theater" | "convention-center" | "other"
 
 // Venue type icons
 const venueTypeConfig: Record<VenueType, { icon: typeof Building2; color: string; bgColor: string }> = {
@@ -41,7 +39,19 @@ const venueTypeConfig: Record<VenueType, { icon: typeof Building2; color: string
 
 export default function ContactDetail() {
   const { id } = useParams<{ id: string }>()
-  const contact = id ? getContactById(id) : null
+  const { data: contact, isLoading } = useContact(id || '')
+  const { data: contactInteractions = [] } = useInteractionsByContact(id || '')
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 pl-64 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </main>
+      </div>
+    )
+  }
 
   if (!contact) {
     return (
@@ -59,13 +69,12 @@ export default function ContactDetail() {
     )
   }
 
-  const contactVenues = contact.venueIds.map(vid => getVenueById(vid)).filter(Boolean)
-  const operator = contact.operatorId ? getOperatorById(contact.operatorId) : null
+  const contactVenues = contact.venues || []
 
-  // Get all interactions for this contact
-  const contactInteractions = interactions
-    .filter(i => i.contactId === contact.id)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  // Sort interactions by date
+  const sortedInteractions = [...contactInteractions].sort(
+    (a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  )
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -82,7 +91,7 @@ export default function ContactDetail() {
 
             <Avatar className="h-16 w-16 border-2 border-primary/20">
               <AvatarFallback className="bg-primary/10 text-primary text-xl font-semibold">
-                {contact.avatar || contact.name.split(' ').map(n => n[0]).join('')}
+                {contact.avatar || contact.name.split(' ').map((n: string) => n[0]).join('')}
               </AvatarFallback>
             </Avatar>
 
@@ -132,7 +141,7 @@ export default function ContactDetail() {
           <Tabs defaultValue="overview">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="timeline">Timeline ({contactInteractions.length})</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline ({sortedInteractions.length})</TabsTrigger>
               <TabsTrigger value="venues">Venues ({contactVenues.length})</TabsTrigger>
             </TabsList>
 
@@ -140,7 +149,7 @@ export default function ContactDetail() {
               <div className="grid gap-6 lg:grid-cols-3">
                 <div className="lg:col-span-2 space-y-6">
                   {/* Recent Interactions */}
-                  <InteractionTimeline interactions={contactInteractions.slice(0, 3)} />
+                  <InteractionTimeline interactions={sortedInteractions.slice(0, 3)} />
 
                   {/* Associated Venues */}
                   <Card>
@@ -149,9 +158,9 @@ export default function ContactDetail() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
-                        {contactVenues.map((venue) => {
+                        {contactVenues.map((venue: any) => {
                           if (!venue) return null
-                          const typeConfig = venueTypeConfig[venue.type]
+                          const typeConfig = venueTypeConfig[venue.type as VenueType] || venueTypeConfig.other
                           const TypeIcon = typeConfig.icon
 
                           return (
@@ -180,7 +189,7 @@ export default function ContactDetail() {
 
                 {/* Insights Panel */}
                 <div>
-                  <InsightsPanel interactions={contactInteractions} />
+                  <InsightsPanel interactions={sortedInteractions} />
                 </div>
               </div>
             </TabsContent>
@@ -188,21 +197,21 @@ export default function ContactDetail() {
             <TabsContent value="timeline" className="mt-6">
               <div className="grid gap-6 lg:grid-cols-3">
                 <div className="lg:col-span-2">
-                  <InteractionTimeline interactions={contactInteractions} showFull />
+                  <InteractionTimeline interactions={sortedInteractions} showFull />
                 </div>
                 <div>
-                  <InsightsPanel interactions={contactInteractions} showFull />
+                  <InsightsPanel interactions={sortedInteractions} showFull />
                 </div>
               </div>
             </TabsContent>
 
             <TabsContent value="venues" className="mt-6">
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {contactVenues.map((venue) => {
+                {contactVenues.map((venue: any) => {
                   if (!venue) return null
-                  const typeConfig = venueTypeConfig[venue.type]
+                  const typeConfig = venueTypeConfig[venue.type as VenueType] || venueTypeConfig.other
                   const TypeIcon = typeConfig.icon
-                  const venueInteractions = contactInteractions.filter(i => i.venueId === venue.id)
+                  const venueInteractions = sortedInteractions.filter((i: any) => i.venueId === venue.id)
 
                   return (
                     <Card key={venue.id} className="overflow-hidden hover:shadow-md transition-shadow">
@@ -226,7 +235,7 @@ export default function ContactDetail() {
                         <div className="p-4 bg-secondary/20 space-y-2">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">Type</span>
-                            <span className="capitalize">{venue.type.replace('-', ' ')}</span>
+                            <span className="capitalize">{venue.type?.replace('-', ' ') || 'Other'}</span>
                           </div>
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">Interactions</span>

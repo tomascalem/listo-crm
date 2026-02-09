@@ -1,4 +1,5 @@
-import { getUserById, getScheduledEventsForUser, getTodosForUser } from "@/lib/mock-data"
+import { useUser } from "@/queries/users"
+import { useDashboardSchedule, useDashboardTodos } from "@/queries/dashboard"
 
 interface DashboardGreetingProps {
   userId: string
@@ -22,24 +23,28 @@ function getWeekRange(): { start: Date; end: Date } {
 }
 
 export function DashboardGreeting({ userId }: DashboardGreetingProps) {
-  const user = getUserById(userId)
-  const firstName = user?.name.split(" ")[0] || "there"
+  const { data: user } = useUser(userId)
+  const firstName = user?.name?.split(" ")[0] || "there"
 
   // Get today's date in ISO format for filtering
   const today = new Date().toISOString().split("T")[0]
 
-  // Count today's events
-  const todaysEvents = getScheduledEventsForUser(userId, today)
+  // Fetch today's events
+  const { data: scheduleData } = useDashboardSchedule(today)
+  const todaysEvents = scheduleData?.items || []
   const meetingCount = todaysEvents.length
+
+  // Fetch user's todos
+  const { data: todosData } = useDashboardTodos(50)
+  const allTodos = todosData?.items || []
 
   // Count tasks due this week
   const { end: weekEnd } = getWeekRange()
-  const allTodos = getTodosForUser(userId)
-  const weekTodos = allTodos.filter((t) => new Date(t.dueDate) <= weekEnd)
+  const weekTodos = allTodos.filter((t: any) => new Date(t.dueDate) <= weekEnd)
   const tasksDueThisWeek = weekTodos.length
 
   // Count high priority items
-  const highPriorityCount = allTodos.filter((t) => t.priority === "high").length
+  const highPriorityCount = allTodos.filter((t: any) => t.priority === "high").length
 
   return (
     <div className="rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6">

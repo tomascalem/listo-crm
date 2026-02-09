@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import {
   CheckSquare,
@@ -10,16 +10,14 @@ import {
   Clock,
   Bot,
   RotateCcw,
+  Loader2,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import {
-  getTodosForUser,
-  getVenueById,
-  getContactById,
-  type Todo,
-} from "@/lib/mock-data"
+import { useDashboardTodos } from "@/queries/dashboard"
 import { cn } from "@/lib/utils"
+
+type TodoType = "email" | "call" | "meeting" | "document" | "follow-up" | "other"
 
 interface TodoActionListProps {
   userId: string
@@ -27,7 +25,7 @@ interface TodoActionListProps {
 }
 
 const taskTypeConfig: Record<
-  Todo["type"],
+  TodoType,
   { icon: typeof Mail; label: string; color: string }
 > = {
   email: { icon: Mail, label: "Email", color: "text-sky-500" },
@@ -51,14 +49,24 @@ export function TodoActionList({ userId, limit = 5 }: TodoActionListProps) {
   const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set())
   const [enteringIds, setEnteringIds] = useState<Set<string>>(new Set())
 
-  const allTodos = getTodosForUser(userId)
+  const { data: todosData, isLoading } = useDashboardTodos(100)
+  const allTodos = todosData?.items || []
+
+  // Initialize completedIds from API data
+  useEffect(() => {
+    if (allTodos.length > 0) {
+      const completed = new Set<string>(allTodos.filter((t: any) => t.completed).map((t: any) => t.id as string))
+      setCompletedIds(completed)
+    }
+  }, [allTodos.length])
+
   const todos = allTodos
-    .filter((t) => !t.completed && !completedIds.has(t.id))
+    .filter((t: any) => !t.completed && !completedIds.has(t.id))
     .slice(0, limit)
 
   const toggleComplete = (id: string) => {
     // Find which task will enter when this one is removed
-    const visibleTodos = allTodos.filter((t) => !t.completed && !completedIds.has(t.id))
+    const visibleTodos = allTodos.filter((t: any) => !t.completed && !completedIds.has(t.id))
     const nextTask = visibleTodos[limit] // The task that will slide into view
 
     // Phase 1: Flash green
@@ -100,6 +108,24 @@ export function TodoActionList({ userId, limit = 5 }: TodoActionListProps) {
     }, 750) // 450 + 300 for the enter animation
   }
 
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <CheckSquare className="h-5 w-5 text-primary" />
+            Your Tasks
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -130,12 +156,10 @@ export function TodoActionList({ userId, limit = 5 }: TodoActionListProps) {
           </div>
         ) : (
           <div className="space-y-0.5">
-            {todos.map((todo, index) => {
-              const venue = todo.venueId ? getVenueById(todo.venueId) : null
-              const contact = todo.contactId
-                ? getContactById(todo.contactId)
-                : null
-              const cfg = taskTypeConfig[todo.type]
+            {todos.map((todo: any, index: number) => {
+              const venue = todo.venue || null
+              const contact = todo.contact || null
+              const cfg = taskTypeConfig[todo.type as TodoType] || taskTypeConfig.other
               const Icon = cfg.icon
               const SourceIcon = todo.source
                 ? sourceTypeIcons[todo.source.type]
@@ -221,9 +245,9 @@ export function TodoActionList({ userId, limit = 5 }: TodoActionListProps) {
               )
             })}
             {/* Remaining count */}
-            {allTodos.filter((t) => !t.completed && !completedIds.has(t.id)).length > limit && (
+            {allTodos.filter((t: any) => !t.completed && !completedIds.has(t.id)).length > limit && (
               <div className="px-3 py-2 text-xs text-muted-foreground">
-                +{allTodos.filter((t) => !t.completed && !completedIds.has(t.id)).length - limit} more tasks remaining
+                +{allTodos.filter((t: any) => !t.completed && !completedIds.has(t.id)).length - limit} more tasks remaining
               </div>
             )}
           </div>

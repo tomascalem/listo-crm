@@ -8,18 +8,14 @@ import {
   FileSignature,
   ArrowUpRight,
   ArrowRight,
+  Loader2,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import {
-  businessInsights,
-  getVenueById,
-  getOperatorById,
-  type BusinessInsight,
-  type InsightType,
-  type InsightPriority,
-} from "@/lib/mock-data"
+import { useBusinessInsights } from "@/queries/dashboard"
+
+type InsightType = "engagement-metric" | "pipeline-alert" | "milestone" | "inbound-activity" | "contract-news"
+type InsightPriority = "positive" | "warning" | "urgent" | "info"
 
 interface BusinessInsightsProps {
   limit?: number
@@ -71,9 +67,11 @@ function formatMetricValue(metric: { value: number; change: number; unit: string
 }
 
 export function BusinessInsights({ limit = 4 }: BusinessInsightsProps) {
+  const { data: insightsData, isLoading } = useBusinessInsights(limit)
+
   // Sort by timestamp descending
-  const insights = [...businessInsights]
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  const insights = [...(insightsData?.items || [])]
+    .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, limit)
 
   return (
@@ -85,7 +83,11 @@ export function BusinessInsights({ limit = 4 }: BusinessInsightsProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {insights.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : insights.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Newspaper className="h-10 w-10 mx-auto mb-3 opacity-50" />
             <p>No insights yet</p>
@@ -93,12 +95,12 @@ export function BusinessInsights({ limit = 4 }: BusinessInsightsProps) {
           </div>
         ) : (
           <div className="space-y-3">
-            {insights.map((insight) => {
-              const typeConfig = insightTypeConfig[insight.type]
-              const prioConfig = priorityConfig[insight.priority]
+            {insights.map((insight: any) => {
+              const typeConfig = insightTypeConfig[insight.type as InsightType] || insightTypeConfig["engagement-metric"]
+              const prioConfig = priorityConfig[insight.priority as InsightPriority] || priorityConfig.info
               const Icon = typeConfig.icon
-              const venue = insight.venueId ? getVenueById(insight.venueId) : null
-              const operator = insight.operatorId ? getOperatorById(insight.operatorId) : null
+              const venue = insight.venue || null
+              const operator = insight.operator || null
 
               return (
                 <div

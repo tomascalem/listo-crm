@@ -13,28 +13,44 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Bell, Search, Mail, Phone } from "lucide-react"
-import { contacts, getVenueById, interactions } from "@/lib/mock-data"
-
-// Get last interaction for a contact
-function getLastInteraction(contactId: string) {
-  return interactions
-    .filter(i => i.contactId === contactId)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
-}
+import { Bell, Search, Mail, Phone, Loader2 } from "lucide-react"
+import { useContacts } from "@/queries/contacts"
+import { useInteractions } from "@/queries/interactions"
 
 export default function Contacts() {
   const [searchQuery, setSearchQuery] = useState("")
 
+  const { data: contacts = [], isLoading: contactsLoading } = useContacts({ search: searchQuery })
+  const { data: allInteractions = [] } = useInteractions()
+
+  // Get last interaction for a contact
+  const getLastInteraction = (contactId: string) => {
+    return allInteractions
+      .filter((i: any) => i.contactId === contactId)
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+  }
+
   const filteredContacts = useMemo(() => {
-    return contacts.filter((contact) => {
+    if (!searchQuery) return contacts
+    return contacts.filter((contact: any) => {
       const matchesSearch =
         contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         contact.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         contact.role.toLowerCase().includes(searchQuery.toLowerCase())
       return matchesSearch
     })
-  }, [searchQuery])
+  }, [contacts, searchQuery])
+
+  if (contactsLoading) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 lg:pl-64 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -80,8 +96,8 @@ export default function Contacts() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredContacts.map((contact) => {
-                  const contactVenues = contact.venueIds.map(vid => getVenueById(vid)).filter(Boolean)
+                {filteredContacts.map((contact: any) => {
+                  const contactVenues = contact.venues || []
                   const lastInteraction = getLastInteraction(contact.id)
 
                   return (
@@ -90,7 +106,7 @@ export default function Contacts() {
                         <Link to={`/contacts/${contact.id}`} className="flex items-center gap-3 hover:text-primary">
                           <Avatar className="border border-primary/20">
                             <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                              {contact.avatar || contact.name.split(' ').map(n => n[0]).join('')}
+                              {contact.avatar || contact.name.split(' ').map((n: string) => n[0]).join('')}
                             </AvatarFallback>
                           </Avatar>
                           <div>
@@ -109,7 +125,7 @@ export default function Contacts() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          {contactVenues.slice(0, 2).map((venue) => venue && (
+                          {contactVenues.slice(0, 2).map((venue: any) => venue && (
                             <Link key={venue.id} to={`/venues/${venue.id}`}>
                               <Badge variant="outline" className="text-xs hover:bg-primary/10 hover:text-primary transition-colors">
                                 {venue.name}

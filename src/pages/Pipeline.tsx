@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 import {
   DndContext,
@@ -43,6 +44,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   Bell,
   MapPin,
   Search,
@@ -65,15 +71,13 @@ import {
   Inbox,
 } from "lucide-react"
 import {
-  venues as allVenues,
-  operators,
-  users,
-  getOperatorById,
-  getContactsByVenueId,
   type Venue,
   type VenueStage,
   type VenueType,
 } from "@/lib/mock-data"
+import { useVenues, useUpdateVenueStage } from "@/queries/venues"
+import { useOperators } from "@/queries/operators"
+import { useUsers } from "@/queries/todos"
 import { AddVenueModal } from "@/components/crm/modals/add-venue-modal"
 import { LogActivityModal } from "@/components/crm/modals/log-activity-modal"
 import { AddTaskModal } from "@/components/crm/modals/add-task-modal"
@@ -128,7 +132,7 @@ function formatDaysInStage(lastActivity: string): string {
   return months === 1 ? "1 month" : `${months} months`
 }
 
-function needsAttention(venue: Venue): boolean {
+function needsAttention(venue: Venue): { needs: boolean; reason: string | null } {
   const now = new Date()
   const lastActivity = new Date(venue.lastActivity)
   const diffDays = Math.floor((now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24))
@@ -137,11 +141,17 @@ function needsAttention(venue: Venue): boolean {
   // 1. In negotiation stage with no activity in 10+ days (critical stage)
   // 2. High-value deal (>$300K) with no activity in 14+ days
   // 3. Any deal with no activity in 30+ days
-  if (venue.stage === "negotiation" && diffDays >= 10) return true
-  if ((venue.dealValue || 0) > 300000 && diffDays >= 14) return true
-  if (diffDays >= 30) return true
+  if (venue.stage === "negotiation" && diffDays >= 10) {
+    return { needs: true, reason: `No activity for ${diffDays} days in negotiation stage` }
+  }
+  if ((venue.dealValue || 0) > 300000 && diffDays >= 14) {
+    return { needs: true, reason: `High-value deal inactive for ${diffDays} days` }
+  }
+  if (diffDays >= 30) {
+    return { needs: true, reason: `No activity for ${diffDays} days` }
+  }
 
-  return false
+  return { needs: false, reason: null }
 }
 
 // Draggable deal card component
@@ -155,13 +165,12 @@ interface DealCardProps {
 
 const DealCard = memo(function DealCard({ venue, isOverlay, isPendingConfirmation, isReturning, isCollapsing }: DealCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const operator = getOperatorById(venue.operatorId)
-  const typeConfig = venueTypeConfig[venue.type]
+  const operator = venue.operator
+  const typeConfig = venueTypeConfig[venue.type] || venueTypeConfig.other
   const TypeIcon = typeConfig.icon
-  const attention = needsAttention(venue)
-  const contacts = getContactsByVenueId(venue.id)
-  const primaryContact = contacts.find((c) => c.isPrimary) || contacts[0]
-  const assignedUsers = venue.assignedUserIds.map(id => users.find(u => u.id === id)).filter(Boolean)
+  const attentionInfo = needsAttention(venue)
+  // Get assigned users from venue data (already populated by API)
+  const assignedUsers = venue.assignedUsers || []
 
   const {
     attributes,
@@ -207,7 +216,7 @@ const DealCard = memo(function DealCard({ venue, isOverlay, isPendingConfirmatio
           ? "border-border shadow-xl ring-2 ring-primary/50"
           : isOverlay
             ? "border-border shadow-xl ring-2 ring-primary/50 rotate-2"
-            : attention
+            : attentionInfo.needs
               ? "border-border ring-1 ring-warning/50 shadow-sm hover:border-primary/40 hover:shadow-md"
               : "border-border shadow-sm hover:border-primary/40 hover:shadow-md"
       }`}
@@ -225,7 +234,7 @@ const DealCard = memo(function DealCard({ venue, isOverlay, isPendingConfirmatio
                 <span className="font-medium text-sm truncate">
                   {venue.name}
                 </span>
-                {attention && (
+                {attentionInfo.needs && (
                   <Badge variant="outline" className="h-4 px-1 text-[10px] font-medium bg-warning/10 text-warning border-warning/30 shrink-0">
                     <AlertCircle className="h-2.5 w-2.5 mr-0.5" />
                     Action
@@ -260,7 +269,6 @@ const DealCard = memo(function DealCard({ venue, isOverlay, isPendingConfirmatio
               <DropdownMenuSeparator />
               <LogActivityModal
                 venueId={venue.id}
-                contactId={primaryContact?.id}
                 trigger={
                   <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                     <Phone className="h-4 w-4 mr-2" />
@@ -270,7 +278,6 @@ const DealCard = memo(function DealCard({ venue, isOverlay, isPendingConfirmatio
               />
               <LogActivityModal
                 venueId={venue.id}
-                contactId={primaryContact?.id}
                 trigger={
                   <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                     <Mail className="h-4 w-4 mr-2" />
@@ -280,7 +287,6 @@ const DealCard = memo(function DealCard({ venue, isOverlay, isPendingConfirmatio
               />
               <AddTaskModal
                 venueId={venue.id}
-                contactId={primaryContact?.id}
                 trigger={
                   <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                     <Calendar className="h-4 w-4 mr-2" />
@@ -506,20 +512,27 @@ function ListView({ venues }: { venues: Venue[] }) {
         </thead>
         <tbody className="divide-y divide-border">
           {venues.map((venue) => {
-            const operator = getOperatorById(venue.operatorId)
-            const typeConfig = venueTypeConfig[venue.type]
+            const operator = venue.operator
+            const typeConfig = venueTypeConfig[venue.type] || venueTypeConfig.other
             const TypeIcon = typeConfig.icon
             const stageConfig = stages.find((s) => s.key === venue.stage)
-            const attention = needsAttention(venue)
-            const contacts = getContactsByVenueId(venue.id)
-            const primaryContact = contacts.find((c) => c.isPrimary) || contacts[0]
+            const attentionInfo = needsAttention(venue)
 
             return (
               <tr key={venue.id} className="hover:bg-muted/30 transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    {attention && (
-                      <AlertCircle className="h-4 w-4 text-warning shrink-0" />
+                    {attentionInfo.needs && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="shrink-0 cursor-help">
+                            <AlertCircle className="h-4 w-4 text-warning" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[200px]">
+                          <p className="text-xs">{attentionInfo.reason}</p>
+                        </TooltipContent>
+                      </Tooltip>
                     )}
                     <Link
                       to={`/venues/${venue.id}`}
@@ -574,7 +587,6 @@ function ListView({ venues }: { venues: Venue[] }) {
                       <DropdownMenuSeparator />
                       <LogActivityModal
                         venueId={venue.id}
-                        contactId={primaryContact?.id}
                         trigger={
                           <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                             <Phone className="h-4 w-4 mr-2" />
@@ -584,7 +596,6 @@ function ListView({ venues }: { venues: Venue[] }) {
                       />
                       <AddTaskModal
                         venueId={venue.id}
-                        contactId={primaryContact?.id}
                         trigger={
                           <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                             <Calendar className="h-4 w-4 mr-2" />
@@ -680,7 +691,25 @@ function ReturnAnimationOverlay({
 }
 
 export default function Pipeline() {
-  const [venues, setVenues] = useState(allVenues.filter((v) => v.stage !== "closed-lost"))
+  // Fetch data using React Query
+  const { data: venuesData = [], isLoading: venuesLoading } = useVenues()
+  const { data: operatorsData = [] } = useOperators()
+  const { data: usersData = [] } = useUsers()
+  const updateStageMutation = useUpdateVenueStage()
+
+  // Local state for optimistic updates during drag
+  const [localVenues, setLocalVenues] = useState<Venue[]>([])
+
+  // Sync local venues with server data
+  useEffect(() => {
+    if (venuesData.length > 0) {
+      setLocalVenues(venuesData.filter((v: any) => v.stage !== "closed-lost"))
+    }
+  }, [venuesData])
+
+  const venues = localVenues
+  const setVenues = setLocalVenues
+
   const [viewMode, setViewMode] = useState<ViewMode>("kanban")
   const [searchQuery, setSearchQuery] = useState("")
   const [operatorFilter, setOperatorFilter] = useState<string>("all")
@@ -849,12 +878,15 @@ export default function Pipeline() {
   }, [activeVenue, venues])
 
   const applyStageChange = useCallback((venueId: string, newStage: VenueStage) => {
+    // Optimistic local update
     setVenues((prev) =>
       prev.map((v) =>
         v.id === venueId ? { ...v, stage: newStage, lastActivity: new Date().toISOString() } : v
       )
     )
-  }, [])
+    // Persist to server
+    updateStageMutation.mutate({ id: venueId, stage: newStage })
+  }, [updateStageMutation])
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     setActiveVenue(null)
@@ -978,6 +1010,21 @@ export default function Pipeline() {
     }
   }, [stageChangeDialog, applyStageChange])
 
+  // Show loading state while fetching initial data
+  if (venuesLoading && localVenues.length === 0) {
+    return (
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 lg:pl-64 flex items-center justify-center">
+          <div className="text-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading pipeline...</p>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar />
@@ -1024,7 +1071,7 @@ export default function Pipeline() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Operators</SelectItem>
-                  {operators.map((op) => (
+                  {operatorsData.map((op: any) => (
                     <SelectItem key={op.id} value={op.id}>
                       {op.name}
                     </SelectItem>

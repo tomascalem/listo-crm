@@ -1,12 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import {
-  operators,
-  getOperatorById,
-  getVenuesByOperatorId,
-  getContactsByOperatorId,
-  getInteractionsByOperatorId,
-  getTodosByOperatorId,
-} from '../lib/mock-data'
+import { operatorsApi, interactionsApi, todosApi } from '../lib/api'
 
 export const operatorKeys = {
   all: ['operators'] as const,
@@ -23,8 +16,8 @@ export function useOperators() {
   return useQuery({
     queryKey: operatorKeys.lists(),
     queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return operators
+      const response = await operatorsApi.list()
+      return response.items
     },
   })
 }
@@ -32,10 +25,7 @@ export function useOperators() {
 export function useOperator(id: string) {
   return useQuery({
     queryKey: operatorKeys.detail(id),
-    queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return getOperatorById(id)
-    },
+    queryFn: () => operatorsApi.getById(id),
     enabled: !!id,
   })
 }
@@ -43,10 +33,7 @@ export function useOperator(id: string) {
 export function useOperatorVenues(operatorId: string) {
   return useQuery({
     queryKey: operatorKeys.venues(operatorId),
-    queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return getVenuesByOperatorId(operatorId)
-    },
+    queryFn: () => operatorsApi.getVenues(operatorId),
     enabled: !!operatorId,
   })
 }
@@ -54,10 +41,7 @@ export function useOperatorVenues(operatorId: string) {
 export function useOperatorContacts(operatorId: string) {
   return useQuery({
     queryKey: operatorKeys.contacts(operatorId),
-    queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return getContactsByOperatorId(operatorId)
-    },
+    queryFn: () => operatorsApi.getContacts(operatorId),
     enabled: !!operatorId,
   })
 }
@@ -66,8 +50,20 @@ export function useOperatorInteractions(operatorId: string) {
   return useQuery({
     queryKey: operatorKeys.interactions(operatorId),
     queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return getInteractionsByOperatorId(operatorId)
+      // Get venues for this operator, then get interactions for each venue
+      const venues = await operatorsApi.getVenues(operatorId)
+      const allInteractions: any[] = []
+      for (const venue of venues) {
+        try {
+          const response = await interactionsApi.list({ venueId: venue.id })
+          if (response.items) {
+            allInteractions.push(...response.items)
+          }
+        } catch {
+          // Skip venues without interactions
+        }
+      }
+      return allInteractions
     },
     enabled: !!operatorId,
   })
@@ -77,8 +73,20 @@ export function useOperatorTodos(operatorId: string) {
   return useQuery({
     queryKey: operatorKeys.todos(operatorId),
     queryFn: async () => {
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return getTodosByOperatorId(operatorId)
+      // Get venues for this operator, then get todos for each venue
+      const venues = await operatorsApi.getVenues(operatorId)
+      const allTodos: any[] = []
+      for (const venue of venues) {
+        try {
+          const response = await todosApi.list({ venueId: venue.id })
+          if (response.items) {
+            allTodos.push(...response.items)
+          }
+        } catch {
+          // Skip venues without todos
+        }
+      }
+      return allTodos
     },
     enabled: !!operatorId,
   })

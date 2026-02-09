@@ -1,8 +1,11 @@
 import { Sidebar } from "@/components/crm/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Bell, TrendingUp, DollarSign, Users, Target } from "lucide-react"
-import { venues, interactions, contacts, todos } from "@/lib/mock-data"
+import { Bell, TrendingUp, DollarSign, Users, Target, Loader2 } from "lucide-react"
+import { useVenues } from "@/queries/venues"
+import { useContacts } from "@/queries/contacts"
+import { useTodos } from "@/queries/todos"
+import { useInteractions } from "@/queries/interactions"
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat("en-US", {
@@ -14,13 +17,29 @@ function formatCurrency(amount: number) {
 }
 
 export default function Analytics() {
-  const totalPipeline = venues.reduce((sum, v) => sum + (v.dealValue || 0), 0)
+  const { data: venues = [], isLoading: venuesLoading } = useVenues()
+  const { data: contacts = [] } = useContacts()
+  const { data: interactions = [] } = useInteractions()
+  const { data: todos = [] } = useTodos()
+
+  if (venuesLoading) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 lg:pl-64 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </main>
+      </div>
+    )
+  }
+
+  const totalPipeline = venues.reduce((sum: number, v: any) => sum + (v.dealValue || 0), 0)
   const weightedPipeline = venues.reduce(
-    (sum, v) => sum + ((v.dealValue || 0) * (v.probability || 0)) / 100,
+    (sum: number, v: any) => sum + ((v.dealValue || 0) * (v.probability || 0)) / 100,
     0
   )
-  const closedWon = venues.filter((v) => v.stage === "closed-won")
-  const closedWonValue = closedWon.reduce((sum, v) => sum + (v.dealValue || 0), 0)
+  const closedWon = venues.filter((v: any) => v.stage === "closed-won")
+  const closedWonValue = closedWon.reduce((sum: number, v: any) => sum + (v.dealValue || 0), 0)
   const winRate = venues.length > 0 ? (closedWon.length / venues.length) * 100 : 0
 
   const stats = {
@@ -31,20 +50,20 @@ export default function Analytics() {
     totalVenues: venues.length,
     totalContacts: contacts.length,
     totalInteractions: interactions.length,
-    pendingTasks: todos.filter((t) => !t.completed).length,
+    pendingTasks: todos.filter((t: any) => !t.completed).length,
   }
 
   const stageDistribution = [
-    { stage: "Lead", count: venues.filter((v) => v.stage === "lead").length, color: "bg-muted-foreground" },
-    { stage: "Qualified", count: venues.filter((v) => v.stage === "qualified").length, color: "bg-primary" },
-    { stage: "Demo", count: venues.filter((v) => v.stage === "demo").length, color: "bg-chart-2" },
-    { stage: "Proposal", count: venues.filter((v) => v.stage === "proposal").length, color: "bg-chart-3" },
-    { stage: "Negotiation", count: venues.filter((v) => v.stage === "negotiation").length, color: "bg-chart-4" },
-    { stage: "Closed Won", count: venues.filter((v) => v.stage === "closed-won").length, color: "bg-success" },
+    { stage: "Lead", count: venues.filter((v: any) => v.stage === "lead").length, color: "bg-muted-foreground" },
+    { stage: "Qualified", count: venues.filter((v: any) => v.stage === "qualified").length, color: "bg-primary" },
+    { stage: "Demo", count: venues.filter((v: any) => v.stage === "demo").length, color: "bg-chart-2" },
+    { stage: "Proposal", count: venues.filter((v: any) => v.stage === "proposal").length, color: "bg-chart-3" },
+    { stage: "Negotiation", count: venues.filter((v: any) => v.stage === "negotiation").length, color: "bg-chart-4" },
+    { stage: "Closed Won", count: venues.filter((v: any) => v.stage === "closed-won").length, color: "bg-success" },
   ]
 
   const topVenues = [...venues]
-    .sort((a, b) => (b.dealValue || 0) - (a.dealValue || 0))
+    .sort((a: any, b: any) => (b.dealValue || 0) - (a.dealValue || 0))
     .slice(0, 5)
 
   return (
@@ -138,7 +157,7 @@ export default function Analytics() {
                         <div className="h-2 bg-secondary rounded-full mt-1">
                           <div
                             className={`h-2 rounded-full ${item.color}`}
-                            style={{ width: `${(item.count / venues.length) * 100}%` }}
+                            style={{ width: `${venues.length > 0 ? (item.count / venues.length) * 100 : 0}%` }}
                           />
                         </div>
                       </div>
@@ -154,7 +173,7 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {topVenues.map((venue, index) => (
+                  {topVenues.map((venue: any, index: number) => (
                     <div key={venue.id} className="flex items-center gap-4">
                       <span className="text-lg font-semibold text-muted-foreground w-6">{index + 1}</span>
                       <div className="flex-1">

@@ -1,16 +1,10 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
-import { Sparkles, Mail, Phone, FileText, MessageSquare, ChevronDown, ChevronUp, X } from "lucide-react"
+import { Sparkles, Mail, Phone, FileText, MessageSquare, ChevronDown, ChevronUp, X, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import {
-  getRecommendedActionsForUser,
-  getVenueById,
-  getContactById,
-  type RecommendedAction,
-  type RecommendedActionType,
-} from "@/lib/mock-data"
+import { useRecommendedActions, useDismissRecommendedAction } from "@/queries/dashboard"
 import { EmailComposerModal } from "@/components/crm/modals/email-composer-modal"
 import { AddTaskModal } from "@/components/crm/modals/add-task-modal"
 
@@ -18,6 +12,8 @@ interface RecommendedActionsProps {
   userId: string
   limit?: number
 }
+
+type RecommendedActionType = "follow-up-email" | "schedule-call" | "send-proposal" | "check-in"
 
 const actionTypeConfig: Record<
   RecommendedActionType,
@@ -29,7 +25,7 @@ const actionTypeConfig: Record<
   "check-in": { icon: MessageSquare, label: "Check In", buttonLabel: "Send Message" },
 }
 
-const priorityConfig = {
+const priorityConfig: Record<string, { label: string; color: string }> = {
   high: { label: "High Priority", color: "bg-destructive/20 text-destructive border-destructive/30" },
   medium: { label: "Suggested", color: "bg-warning/20 text-warning border-warning/30" },
   low: { label: "Optional", color: "bg-muted text-muted-foreground border-border" },
@@ -39,11 +35,15 @@ export function RecommendedActions({ userId, limit = 3 }: RecommendedActionsProp
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const allActions = getRecommendedActionsForUser(userId)
-  const actions = allActions.filter((a) => !dismissedIds.has(a.id)).slice(0, limit)
+  const { data: actionsData, isLoading } = useRecommendedActions()
+  const dismissMutation = useDismissRecommendedAction()
+
+  const allActions = actionsData?.items || []
+  const actions = allActions.filter((a: any) => !dismissedIds.has(a.id)).slice(0, limit)
 
   const dismissAction = (id: string) => {
     setDismissedIds((prev) => new Set(prev).add(id))
+    dismissMutation.mutate(id)
   }
 
   const toggleExpand = (id: string) => {
@@ -62,7 +62,11 @@ export function RecommendedActions({ userId, limit = 3 }: RecommendedActionsProp
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {actions.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+          </div>
+        ) : actions.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-50" />
             <p>No recommendations right now</p>
@@ -70,12 +74,12 @@ export function RecommendedActions({ userId, limit = 3 }: RecommendedActionsProp
           </div>
         ) : (
           <div className="space-y-3">
-            {actions.map((action) => {
-              const config = actionTypeConfig[action.type]
+            {actions.map((action: any) => {
+              const config = actionTypeConfig[action.type as RecommendedActionType] || actionTypeConfig["follow-up-email"]
               const Icon = config.icon
-              const venue = getVenueById(action.venueId)
-              const contact = getContactById(action.contactId)
-              const priorityStyle = priorityConfig[action.priority]
+              const venue = action.venue
+              const contact = action.contact
+              const priorityStyle = priorityConfig[action.priority] || priorityConfig.medium
               const isExpanded = expandedId === action.id
 
               return (
