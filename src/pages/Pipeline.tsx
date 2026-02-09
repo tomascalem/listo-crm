@@ -93,6 +93,9 @@ const stages: { key: VenueStage; label: string; color: string; textColor: string
   { key: "closed-won", label: "Closed Won", color: "bg-success", textColor: "text-success", headerBg: "bg-success/10", headerBorder: "border-success/20", probability: 100 },
 ]
 
+// Set for O(1) stage key lookups during drag operations
+const stageKeySet = new Set(stages.map(s => s.key))
+
 // Venue type configuration with icons and colors
 const venueTypeConfig: Record<VenueType, { icon: typeof Building2; color: string; bgColor: string }> = {
   stadium: { icon: Landmark, color: "text-primary", bgColor: "bg-primary/10" },
@@ -926,6 +929,13 @@ export default function Pipeline() {
     return map
   }, [filteredVenues])
 
+  // Map for O(1) venue lookups by ID (used in drag handlers)
+  const venuesById = useMemo(() => {
+    const map = new Map<string, Venue>()
+    venues.forEach(v => map.set(v.id, v))
+    return map
+  }, [venues])
+
   // Pre-compute weighted values per stage (avoids calculation in render loop)
   const weightedValuesByStage = useMemo(() => {
     const map = new Map<VenueStage, number>()
@@ -952,9 +962,9 @@ export default function Pipeline() {
 
   // Drag handlers - wrapped in useCallback for performance
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    const venue = venues.find((v) => v.id === event.active.id)
+    const venue = venuesById.get(event.active.id as string)
     if (venue) setActiveVenue(venue)
-  }, [venues])
+  }, [venuesById])
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const { over, active } = event
@@ -968,15 +978,15 @@ export default function Pipeline() {
     let targetStage: VenueStage | null = null
     let insertBeforeIndex = -1 // -1 means at the end (after all cards)
 
-    // Check if over a stage column directly
-    if (stages.some((s) => s.key === over.id)) {
+    // Check if over a stage column directly (O(1) lookup)
+    if (stageKeySet.has(over.id as VenueStage)) {
       targetStage = over.id as VenueStage
       // Dropped on column background - insert at end
       const stageVenues = venuesByStage.get(targetStage) || []
       insertBeforeIndex = stageVenues.length // Will show placeholder at end
     } else {
-      // Over a card - find its stage and index
-      const targetVenue = venues.find((v) => v.id === over.id)
+      // Over a card - find its stage and index (O(1) lookup)
+      const targetVenue = venuesById.get(over.id as string)
       if (targetVenue) {
         targetStage = targetVenue.stage
         const stageVenues = venuesByStage.get(targetStage) || []
@@ -1030,7 +1040,7 @@ export default function Pipeline() {
       dropPlaceholderRef.current = null
       setPlaceholderExpanded(false)
     }
-  }, [activeVenue, venues, venuesByStage])
+  }, [activeVenue, venuesById, venuesByStage])
 
   const applyStageChange = useCallback((
     venueId: string,
@@ -1201,7 +1211,7 @@ export default function Pipeline() {
 
     if (!over) return
 
-    const draggedVenue = venues.find((v) => v.id === active.id)
+    const draggedVenue = venuesById.get(active.id as string)
     if (!draggedVenue) return
 
     // Use the placeholder position that was shown during drag, not the over detection
@@ -1227,11 +1237,11 @@ export default function Pipeline() {
       }
     } else {
       // Fallback: determine from over.id
-      if (stages.some((s) => s.key === over.id)) {
+      if (stageKeySet.has(over.id as VenueStage)) {
         targetStage = over.id as VenueStage
         insertAfterVenueId = undefined
       } else {
-        const targetVenue = venues.find((v) => v.id === over.id)
+        const targetVenue = venuesById.get(over.id as string)
         if (targetVenue) {
           targetStage = targetVenue.stage
           const stageVenues = venuesByStage.get(targetStage) || []
@@ -1289,7 +1299,7 @@ export default function Pipeline() {
           // FLIP animation: after React re-renders, animate other cards from old to new positions
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              const animatedCards: HTMLElement[] = []
+              const animatedCards: { card: HTMLElement; delta: number }[] = []
               if (columnEl) {
                 const cards = columnEl.querySelectorAll('[data-venue-id]') as NodeListOf<HTMLElement>
                 cards.forEach(card => {
@@ -1302,25 +1312,32 @@ export default function Pipeline() {
                     const delta = oldTop - newTop
 
                     if (Math.abs(delta) > 1) {
-                      animatedCards.push(card)
-                      // Immediately position at old location (no transition)
-                      card.style.transform = `translateY(${delta}px)`
-                      card.style.transition = 'none'
-
-                      // Force reflow to ensure the transform is applied
-                      card.offsetHeight
-
-                      // Animate to new position
-                      card.style.transition = 'transform 200ms ease-out'
-                      card.style.transform = 'translateY(0)'
+                      animatedCards.push({ card, delta })
                     }
                   }
+                })
+
+                // Batch 1: Apply all transforms with no transition (single write pass)
+                animatedCards.forEach(({ card, delta }) => {
+                  card.style.transition = 'none'
+                  card.style.transform = `translateY(${delta}px)`
+                })
+
+                // Single forced reflow to flush all transforms
+                if (animatedCards.length > 0) {
+                  animatedCards[0].card.offsetHeight
+                }
+
+                // Batch 2: Apply all transitions and animate to final position
+                animatedCards.forEach(({ card }) => {
+                  card.style.transition = 'transform 200ms ease-out'
+                  card.style.transform = 'translateY(0)'
                 })
               }
 
               // Clean up inline styles and clear state after animation completes
               setTimeout(() => {
-                animatedCards.forEach(card => {
+                animatedCards.forEach(({ card }) => {
                   card.style.removeProperty('transform')
                   card.style.removeProperty('transition')
                 })
@@ -1367,7 +1384,7 @@ export default function Pipeline() {
         }
       }
     }
-  }, [venues, venuesByStage, applyStageChange, reorderWithinStage])
+  }, [venuesById, venuesByStage, applyStageChange, reorderWithinStage])
 
   const confirmStageChange = useCallback(() => {
     // Already applied optimistically, just close the dialog
