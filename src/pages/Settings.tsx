@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Bell, User, Users, Plug, CreditCard } from "lucide-react"
+import { GoogleIntegration } from "@/components/crm/settings/google-integration"
 
 export default function Settings() {
   return (
@@ -158,18 +159,21 @@ export default function Settings() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="integrations" className="mt-6">
+            <TabsContent value="integrations" className="mt-6 space-y-6">
+              {/* Google Integration */}
+              <GoogleIntegration />
+
+              {/* Other Integrations */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Integrations</CardTitle>
-                  <CardDescription>Connect your tools and services</CardDescription>
+                  <CardTitle>Other Integrations</CardTitle>
+                  <CardDescription>Connect additional tools and services</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     {[
-                      { name: "Slack", description: "Get notifications in Slack", connected: true },
+                      { name: "Slack", description: "Get notifications in Slack", connected: false },
                       { name: "Salesforce", description: "Sync contacts and deals", connected: false },
-                      { name: "Google Workspace", description: "Connect your calendar", connected: true },
                       { name: "Zoom", description: "Schedule video calls", connected: false },
                     ].map((integration) => (
                       <div key={integration.name} className="flex items-center justify-between p-4 border rounded-lg">
@@ -177,8 +181,8 @@ export default function Settings() {
                           <p className="font-medium">{integration.name}</p>
                           <p className="text-sm text-muted-foreground">{integration.description}</p>
                         </div>
-                        <Button variant={integration.connected ? "outline" : "default"}>
-                          {integration.connected ? "Connected" : "Connect"}
+                        <Button variant="outline" disabled>
+                          Coming Soon
                         </Button>
                       </div>
                     ))}

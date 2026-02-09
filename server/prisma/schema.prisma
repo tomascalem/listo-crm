@@ -139,6 +139,12 @@ enum ImportStatus {
   failed
 }
 
+enum GoogleSyncStatus {
+  idle
+  syncing
+  error
+}
+
 // ============================================
 // AUTH & USERS
 // ============================================
@@ -155,6 +161,13 @@ model User {
 
   // Refresh tokens for auth
   refreshTokens RefreshToken[]
+
+  // API Keys (for integrations like Gmail Add-on)
+  apiKeys ApiKey[]
+
+  // Google OAuth
+  googleOAuthToken GoogleOAuthToken?
+  googleSyncState  GoogleSyncState?
 
   // Relations
   assignedVenues     VenueAssignment[]
@@ -184,6 +197,22 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String    // e.g., "Gmail Add-on"
+  keyHash     String    @unique @map("key_hash") // SHA-256 hash of the key
+  keyPrefix   String    @map("key_prefix") // First 8 chars for identification
+  lastUsedAt  DateTime? @map("last_used_at")
+  expiresAt   DateTime? @map("expires_at") // null = never expires
+  createdAt   DateTime  @default(now()) @map("created_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  @@index([userId])
+  @@map("api_keys")
+}
+
 model UserPreference {
   id                 String  @id @default(cuid())
   userId             String  @unique @map("user_id")
@@ -194,6 +223,80 @@ model UserPreference {
   timezone           String  @default("America/New_York")
 
   @@map("user_preferences")
+}
+
+// ============================================
+// GOOGLE OAUTH INTEGRATION
+// ============================================
+
+model GoogleOAuthToken {
+  id           String   @id @default(cuid())
+  userId       String   @unique @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Encrypted tokens
+  accessToken  String   @map("access_token") @db.Text
+  refreshToken String   @map("refresh_token") @db.Text
+
+  // Token metadata
+  scope        String
+  tokenType    String   @default("Bearer") @map("token_type")
+  expiresAt    DateTime @map("expires_at")
+
+  // Google account info
+  googleEmail  String   @map("google_email")
+  googleId     String?  @map("google_id")
+
+  // Sync state tracking
+  lastGmailSync     DateTime? @map("last_gmail_sync")
+  lastCalendarSync  DateTime? @map("last_calendar_sync")
+  gmailHistoryId    String?   @map("gmail_history_id")
+  calendarSyncToken String?   @map("calendar_sync_token")
+
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("google_oauth_tokens")
+}
+
+model GoogleSyncState {
+  id                 String           @id @default(cuid())
+  userId             String           @unique @map("user_id")
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  gmailSyncStatus    GoogleSyncStatus @default(idle) @map("gmail_sync_status")
+  calendarSyncStatus GoogleSyncStatus @default(idle) @map("calendar_sync_status")
+
+  lastGmailError     String?  @map("last_gmail_error")
+  lastCalendarError  String?  @map("last_calendar_error")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("google_sync_states")
+}
+
+model SyncedGmailMessage {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  gmailMessageId String   @unique @map("gmail_message_id")
+  gmailThreadId  String   @map("gmail_thread_id")
+  interactionId  String?  @map("interaction_id")
+  syncedAt       DateTime @default(now()) @map("synced_at")
+
+  @@index([userId, gmailThreadId])
+  @@map("synced_gmail_messages")
+}
+
+model SyncedCalendarEvent {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  googleEventId    String   @unique @map("google_event_id")
+  scheduledEventId String?  @map("scheduled_event_id")
+  lastSyncedAt     DateTime @default(now()) @map("last_synced_at")
+  googleUpdatedAt  DateTime @map("google_updated_at")
+
+  @@index([userId])
+  @@map("synced_calendar_events")
 }
 
 // ============================================
@@ -370,6 +473,9 @@ model Interaction {
   // Email thread stored as JSON
   emailThread Json? @map("email_thread") // EmailMessage[]
 
+  // Gmail sync tracking
+  gmailThreadId String? @map("gmail_thread_id")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -384,6 +490,7 @@ model Interaction {
   // Todos sourced from this interaction
   sourcedTodos Todo[]
 
+  @@index([gmailThreadId])
   @@map("interactions")
 }
 
@@ -514,6 +621,11 @@ model ScheduledEvent {
   notes       String?
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  // Google Calendar sync
+  googleEventId    String?   @unique @map("google_event_id")
+  googleCalendarId String?   @map("google_calendar_id")
+  lastGoogleSync   DateTime? @map("last_google_sync")
 
   // Relations
   venueId   String?  @map("venue_id")

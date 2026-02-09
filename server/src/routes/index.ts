@@ -15,6 +15,8 @@ import notificationsRoutes from './notifications.routes.js';
 import filesRoutes from './files.routes.js';
 import auditRoutes from './audit.routes.js';
 import importExportRoutes from './import-export.routes.js';
+import googleRoutes from './google.routes.js';
+import apiKeyRoutes from './api-key.routes.js';
 
 const router: RouterType = Router();
 
@@ -44,6 +46,8 @@ router.use('/notifications', notificationsRoutes);
 router.use('/files', filesRoutes);
 router.use('/audit', auditRoutes);
 router.use('/import-export', importExportRoutes);
+router.use('/google', googleRoutes);
+router.use('/api-keys', apiKeyRoutes);
 
 // Routes to be added:
 // router.use('/contracts', contractRoutes);

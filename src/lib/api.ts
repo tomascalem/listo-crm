@@ -705,3 +705,51 @@ export const eventsApi = {
     return apiFetch<any>(`/events/${id}`, { method: 'DELETE' });
   },
 };
+
+// ============================================
+// Google Integration API
+// ============================================
+
+export interface GoogleConnectionStatus {
+  connected: boolean;
+  email: string | null;
+  lastGmailSync: string | null;
+  lastCalendarSync: string | null;
+  connectedAt: string | null;
+  syncStatus: {
+    gmailSyncStatus: 'idle' | 'syncing' | 'error';
+    calendarSyncStatus: 'idle' | 'syncing' | 'error';
+    lastGmailError: string | null;
+    lastCalendarError: string | null;
+  } | null;
+}
+
+export interface CalendarSyncResult {
+  synced: boolean;
+  imported: number;
+  updated: number;
+  deleted: number;
+}
+
+export const googleApi = {
+  async getAuthUrl() {
+    return apiFetch<{ authUrl: string }>('/google/auth-url');
+  },
+
+  async disconnect() {
+    return apiFetch<{ disconnected: boolean }>('/google/disconnect', {
+      method: 'POST',
+    });
+  },
+
+  async getConnectionStatus() {
+    return apiFetch<GoogleConnectionStatus>('/google/status');
+  },
+
+  async syncCalendar(fullSync = false) {
+    return apiFetch<CalendarSyncResult>('/google/calendar/sync', {
+      method: 'POST',
+      body: JSON.stringify({ fullSync }),
+    });
+  },
+};

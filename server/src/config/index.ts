@@ -32,6 +32,21 @@ export const config = {
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     s3Bucket: process.env.AWS_S3_BUCKET || 'listo-crm-files',
   },
+
+  // Google OAuth
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/v1/google/callback',
+    scopes: [
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/userinfo.email',
+    ],
+  },
+
+  // Token encryption for storing OAuth tokens
+  tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY || '',
 } as const;
 
 // Validate required environment variables
