@@ -161,9 +161,11 @@ interface DealCardProps {
   isPendingConfirmation?: boolean
   isReturning?: boolean
   isCollapsing?: boolean // For smooth collapse when card leaves this column
+  justDropped?: boolean // Skip sortable transform for just-dropped cards
+  disableTransform?: boolean // Disable dnd-kit transforms to keep cards static
 }
 
-const DealCard = memo(function DealCard({ venue, isOverlay, isPendingConfirmation, isReturning, isCollapsing }: DealCardProps) {
+const DealCard = memo(function DealCard({ venue, isOverlay, isPendingConfirmation, isReturning, isCollapsing, justDropped, disableTransform }: DealCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const operator = venue.operator
   const typeConfig = venueTypeConfig[venue.type] || venueTypeConfig.other
@@ -185,12 +187,21 @@ const DealCard = memo(function DealCard({ venue, isOverlay, isPendingConfirmatio
   const isCollapsingActive = isCollapsing !== undefined
   const shouldCollapse = isCollapsing === true
 
+  // Disable transforms to keep cards static during drag (faded card stays in place)
+  // justDropped also disables transform to prevent animation glitches after drop
+  const effectiveTransform = (justDropped || disableTransform) ? null : transform
+
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Transform.toString(effectiveTransform),
     // Use specific properties instead of 'all' for better performance
-    transition: isCollapsingActive
-      ? 'transform 300ms ease-out, opacity 300ms ease-out, max-height 300ms ease-out, margin 300ms ease-out, padding 300ms ease-out'
-      : transition,
+    // When just dropped, use no transition to prevent animation glitches
+    // After within-column drop, use smooth transition for cards settling into new positions
+    transition: justDropped
+      ? 'none'
+      : isCollapsingActive
+        ? 'transform 300ms ease-out, opacity 300ms ease-out, max-height 300ms ease-out, margin 300ms ease-out, padding 300ms ease-out'
+        : transition || 'transform 200ms ease-out',
+    // Dragged card is faded (0.3 opacity) to show original position
     opacity: isReturning || shouldCollapse ? 0 : isDragging ? 0.3 : 1,
     overflow: isCollapsingActive ? 'hidden' : undefined,
     // When collapsing is active, control the height
@@ -371,6 +382,10 @@ interface StageColumnProps {
   pendingVenueId?: string
   isOriginColumn?: boolean
   returningVenueId?: string
+  justDroppedVenueId?: string
+  draggingVenueId?: string // ID of venue being dragged within this column
+  dropPlaceholderIndex?: number // Index where to show drop placeholder
+  dropPlaceholderExpanded?: boolean // Whether the placeholder is expanded (for animation)
   columnRef?: (el: HTMLDivElement | null) => void
   expandingPlaceholder?: {
     venueId: string
@@ -385,7 +400,7 @@ interface StageColumnProps {
   } | null
 }
 
-const StageColumn = memo(function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pendingVenueId, isOriginColumn, returningVenueId, columnRef, expandingPlaceholder, collapsingPlaceholder }: StageColumnProps) {
+const StageColumn = memo(function StageColumn({ stage, venues, weightedValue, isActiveDropTarget, pendingVenueId, isOriginColumn, returningVenueId, justDroppedVenueId, draggingVenueId, dropPlaceholderIndex, dropPlaceholderExpanded, columnRef, expandingPlaceholder, collapsingPlaceholder }: StageColumnProps) {
   const totalValue = useMemo(() => venues.reduce((sum, v) => sum + (v.dealValue || 0), 0), [venues])
   const venueIds = useMemo(() => venues.map((v) => v.id), [venues])
 
@@ -422,6 +437,7 @@ const StageColumn = memo(function StageColumn({ stage, venues, weightedValue, is
       {/* Droppable cards container - scrolls vertically */}
       <div
         ref={setNodeRef}
+        data-stage={stage.key}
         className={`flex-1 min-h-0 rounded-lg p-2 transition-colors border flex flex-col ${
           showDropHighlight ? "bg-primary/10 ring-2 ring-primary/30 ring-dashed border-primary/30" : "bg-muted/30 border-border/50"
         }`}
@@ -446,46 +462,96 @@ const StageColumn = memo(function StageColumn({ stage, venues, weightedValue, is
 
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide p-0.5 -m-0.5">
           <SortableContext items={venueIds} strategy={verticalListSortingStrategy}>
-            <div className="space-y-2">
-              {venues.length === 0 && !expandingPlaceholder ? (
-                // Empty state
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Inbox className="h-8 w-8 text-muted-foreground/40 mb-2" />
-                  <p className="text-sm text-muted-foreground">No deals</p>
-                  <p className="text-xs text-muted-foreground/70">Drag a deal here</p>
-                </div>
-              ) : (
-                // Always use consistent tree structure to prevent remounting
-                venues.map((venue, index) => (
-                  <React.Fragment key={venue.id}>
-                    {expandingPlaceholder?.targetIndex === index && (
-                      <div
-                        className="overflow-hidden transition-[height,margin] duration-300 ease-out"
-                        style={{
-                          height: expandingPlaceholder.expanded ? expandingPlaceholder.height : 0,
-                          marginBottom: expandingPlaceholder.expanded ? 8 : 0,
-                        }}
-                      />
-                    )}
-                    <DealCard
-                      venue={venue}
-                      isPendingConfirmation={venue.id === pendingVenueId}
-                      isReturning={venue.id === returningVenueId}
-                      isCollapsing={collapsingPlaceholder?.venueId === venue.id ? collapsingPlaceholder.collapsed : undefined}
+            {(() => {
+              // Find the index of the venue being dragged within this column
+              const draggingIndex = draggingVenueId ? venues.findIndex(v => v.id === draggingVenueId) : -1
+              // Suppress placeholder at dragged card's position (before it or immediately after it)
+              const isPlaceholderAtDraggedPosition = draggingIndex >= 0 && dropPlaceholderIndex !== undefined && (
+                dropPlaceholderIndex === draggingIndex ||
+                dropPlaceholderIndex === draggingIndex + 1
+              )
+
+              return (
+                <div className="flex flex-col">
+                  {venues.length === 0 && !expandingPlaceholder && dropPlaceholderIndex === undefined ? (
+                    // Empty state (only show if no drop placeholder)
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <Inbox className="h-8 w-8 text-muted-foreground/40 mb-2" />
+                      <p className="text-sm text-muted-foreground">No deals</p>
+                      <p className="text-xs text-muted-foreground/70">Drag a deal here</p>
+                    </div>
+                  ) : (
+                    // Always use consistent tree structure to prevent remounting
+                    venues.map((venue, index) => {
+                      // Show placeholder BEFORE this card if dropPlaceholderIndex matches
+                      // But suppress if it would be at the dragged card's position
+                      const showPlaceholderBefore = dropPlaceholderIndex === index && !isPlaceholderAtDraggedPosition
+
+                      return (
+                        <React.Fragment key={venue.id}>
+                          {/* Expanding placeholder for cancel animation */}
+                          {expandingPlaceholder?.targetIndex === index && (
+                            <div
+                              className="overflow-hidden transition-[max-height,margin] duration-300 ease-out"
+                              style={{
+                                maxHeight: expandingPlaceholder.expanded ? expandingPlaceholder.height : 0,
+                                marginBottom: expandingPlaceholder.expanded ? 8 : 0,
+                              }}
+                            />
+                          )}
+                          {/* Drop placeholder - animates open */}
+                          {showPlaceholderBefore && (
+                            <div
+                              className="rounded-lg border-2 border-dashed border-primary/50 bg-primary/5 overflow-hidden transition-all duration-150 ease-out"
+                              style={{
+                                height: dropPlaceholderExpanded ? 80 : 0,
+                                marginBottom: dropPlaceholderExpanded ? 8 : 0,
+                                opacity: dropPlaceholderExpanded ? 1 : 0,
+                              }}
+                            />
+                          )}
+                          <div
+                            className="transition-transform duration-200 ease-out"
+                            style={{
+                              marginBottom: 8,
+                            }}
+                          >
+                            <DealCard
+                              venue={venue}
+                              isPendingConfirmation={venue.id === pendingVenueId}
+                              isReturning={venue.id === returningVenueId}
+                              isCollapsing={collapsingPlaceholder?.venueId === venue.id ? collapsingPlaceholder.collapsed : undefined}
+                              justDropped={venue.id === justDroppedVenueId}
+                              disableTransform={!!draggingVenueId}
+                            />
+                          </div>
+                        </React.Fragment>
+                      )
+                    })
+                  )}
+                  {/* Drop placeholder at end of list (suppress if at dragged position) */}
+                  {dropPlaceholderIndex !== undefined && dropPlaceholderIndex >= venues.length && !isPlaceholderAtDraggedPosition && (
+                    <div
+                      className="rounded-lg border-2 border-dashed border-primary/50 bg-primary/5 overflow-hidden transition-all duration-150 ease-out"
+                      style={{
+                        height: dropPlaceholderExpanded ? 80 : 0,
+                        marginTop: dropPlaceholderExpanded ? 8 : 0,
+                        opacity: dropPlaceholderExpanded ? 1 : 0,
+                      }}
                     />
-                  </React.Fragment>
-                ))
-              )}
-              {/* Placeholder at end if target index is past all cards */}
-              {expandingPlaceholder && expandingPlaceholder.targetIndex >= venues.length && (
-                <div
-                  className="overflow-hidden transition-[height] duration-300 ease-out"
-                  style={{
-                    height: expandingPlaceholder.expanded ? expandingPlaceholder.height : 0,
-                  }}
-                />
-              )}
-            </div>
+                  )}
+              {/* Placeholder at end if target index is past all cards (for cancel animation) */}
+                  {expandingPlaceholder && expandingPlaceholder.targetIndex >= venues.length && (
+                    <div
+                      className="overflow-hidden transition-[max-height] duration-300 ease-out"
+                      style={{
+                        maxHeight: expandingPlaceholder.expanded ? expandingPlaceholder.height : 0,
+                      }}
+                    />
+                  )}
+                </div>
+              )
+            })()}
           </SortableContext>
         </div>
       </div>
@@ -699,11 +765,38 @@ export default function Pipeline() {
 
   // Local state for optimistic updates during drag
   const [localVenues, setLocalVenues] = useState<Venue[]>([])
+  // Track when we've made local changes that shouldn't be overwritten by server sync
+  const localOrderRef = useRef<Map<string, number>>(new Map())
 
-  // Sync local venues with server data
+  // Sync local venues with server data, but preserve local ordering for recently moved venues
   useEffect(() => {
     if (venuesData.length > 0) {
-      setLocalVenues(venuesData.filter((v: any) => v.stage !== "closed-lost"))
+      const filtered = venuesData.filter((v: any) => v.stage !== "closed-lost")
+
+      // If we have local ordering preferences, apply them
+      if (localOrderRef.current.size > 0) {
+        // Sort by local order preference, keeping relative order for untracked venues
+        const sortedVenues = [...filtered].sort((a, b) => {
+          const orderA = localOrderRef.current.get(a.id)
+          const orderB = localOrderRef.current.get(b.id)
+
+          // If both have local order, use that
+          if (orderA !== undefined && orderB !== undefined) {
+            return orderA - orderB
+          }
+          // If only one has local order, it comes first
+          if (orderA !== undefined) return -1
+          if (orderB !== undefined) return 1
+          // Otherwise preserve server order
+          return 0
+        })
+        setLocalVenues(sortedVenues)
+
+        // Clear local order after applying (one-time use)
+        localOrderRef.current.clear()
+      } else {
+        setLocalVenues(filtered)
+      }
     }
   }, [venuesData])
 
@@ -716,12 +809,26 @@ export default function Pipeline() {
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [activeVenue, setActiveVenue] = useState<Venue | null>(null)
   const [activeDropTarget, setActiveDropTarget] = useState<VenueStage | null>(null)
+  const [justDroppedVenueId, setJustDroppedVenueId] = useState<string | null>(null)
+  // Track where to show the drop placeholder (gap that opens up)
+  const [dropPlaceholder, setDropPlaceholder] = useState<{
+    stage: VenueStage
+    insertAfterIndex: number // index where to show placeholder
+  } | null>(null)
+  // Ref to store placeholder position synchronously (avoids React state batching issues)
+  const dropPlaceholderRef = useRef<{
+    stage: VenueStage
+    insertAfterIndex: number
+  } | null>(null)
+  // Separate state for animation - set slightly after dropPlaceholder to trigger CSS transition
+  const [placeholderExpanded, setPlaceholderExpanded] = useState(false)
   const [stageChangeDialog, setStageChangeDialog] = useState<{
     venue: Venue
     fromStage: VenueStage
     toStage: VenueStage
     originalCardRect: DOMRect | null
     originalIndex: number
+    originalInsertAfterVenueId: string | null | undefined // For restoring position on cancel
   } | null>(null)
   const [returningCard, setReturningCard] = useState<{
     venue: Venue
@@ -850,99 +957,417 @@ export default function Pipeline() {
   }, [venues])
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
-    const { over } = event
+    const { over, active } = event
     if (!over || !activeVenue) {
       setActiveDropTarget(null)
+      setDropPlaceholder(null)
+      dropPlaceholderRef.current = null
       return
     }
 
     let targetStage: VenueStage | null = null
+    let insertBeforeIndex = -1 // -1 means at the end (after all cards)
 
     // Check if over a stage column directly
     if (stages.some((s) => s.key === over.id)) {
       targetStage = over.id as VenueStage
+      // Dropped on column background - insert at end
+      const stageVenues = venuesByStage.get(targetStage) || []
+      insertBeforeIndex = stageVenues.length // Will show placeholder at end
     } else {
-      // Over a card - find its stage
+      // Over a card - find its stage and index
       const targetVenue = venues.find((v) => v.id === over.id)
       if (targetVenue) {
         targetStage = targetVenue.stage
+        const stageVenues = venuesByStage.get(targetStage) || []
+        const cardIndex = stageVenues.findIndex(v => v.id === targetVenue.id)
+
+        // Check if dragged element is in the bottom half of the target card
+        // If so, insert AFTER this card instead of BEFORE
+        const overRect = over.rect
+        const activeRect = active.rect.current.translated
+        if (activeRect && overRect) {
+          const activeCenterY = activeRect.top + activeRect.height / 2
+          const overMidpointY = overRect.top + overRect.height / 2
+
+          if (activeCenterY > overMidpointY) {
+            // Dragging below midpoint - insert after this card
+            insertBeforeIndex = cardIndex + 1
+          } else {
+            // Dragging above midpoint - insert before this card
+            insertBeforeIndex = cardIndex
+          }
+        } else {
+          insertBeforeIndex = cardIndex
+        }
       }
     }
 
-    // Only highlight if moving to a different column
-    if (targetStage && targetStage !== activeVenue.stage) {
-      setActiveDropTarget(targetStage)
+    // Show placeholder for both cross-column and within-column moves
+    if (targetStage) {
+      const isSameColumn = targetStage === activeVenue.stage
+      // Only highlight column for cross-column moves
+      setActiveDropTarget(isSameColumn ? null : targetStage)
+      const newPlaceholder = { stage: targetStage, insertAfterIndex: insertBeforeIndex }
+      // Update ref synchronously for reading in handleDragEnd
+      dropPlaceholderRef.current = newPlaceholder
+      setDropPlaceholder(prev => {
+        // If position changed, trigger animation
+        if (!prev || prev.stage !== targetStage || prev.insertAfterIndex !== insertBeforeIndex) {
+          setPlaceholderExpanded(false)
+          // Expand after a tiny delay to trigger CSS transition
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setPlaceholderExpanded(true)
+            })
+          })
+        }
+        return newPlaceholder
+      })
     } else {
       setActiveDropTarget(null)
+      setDropPlaceholder(null)
+      dropPlaceholderRef.current = null
+      setPlaceholderExpanded(false)
     }
-  }, [activeVenue, venues])
+  }, [activeVenue, venues, venuesByStage])
 
-  const applyStageChange = useCallback((venueId: string, newStage: VenueStage) => {
-    // Optimistic local update
-    setVenues((prev) =>
-      prev.map((v) =>
-        v.id === venueId ? { ...v, stage: newStage, lastActivity: new Date().toISOString() } : v
-      )
-    )
+  const applyStageChange = useCallback((
+    venueId: string,
+    newStage: VenueStage,
+    insertAfterVenueId?: string | null // null = insert at beginning, undefined = append at end
+  ) => {
+    // Optimistic local update with reordering
+    setVenues((prev) => {
+      // Remove the venue from its current position
+      const venueToMove = prev.find(v => v.id === venueId)
+      if (!venueToMove) return prev
+
+      const updatedVenue = { ...venueToMove, stage: newStage, lastActivity: new Date().toISOString() }
+      const withoutVenue = prev.filter(v => v.id !== venueId)
+
+      if (insertAfterVenueId === undefined) {
+        // Append at the end of the target stage
+        // Find the last venue in the target stage and insert after it
+        let lastIndexInStage = -1
+        for (let i = withoutVenue.length - 1; i >= 0; i--) {
+          if (withoutVenue[i].stage === newStage) {
+            lastIndexInStage = i
+            break
+          }
+        }
+        if (lastIndexInStage === -1) {
+          // No venues in target stage, just append
+          return [...withoutVenue, updatedVenue]
+        }
+        // Insert after the last venue in the stage
+        const result = [
+          ...withoutVenue.slice(0, lastIndexInStage + 1),
+          updatedVenue,
+          ...withoutVenue.slice(lastIndexInStage + 1)
+        ]
+        // Save order of venues in the target stage
+        const stageVenues = result.filter(v => v.stage === newStage)
+        stageVenues.forEach((v, idx) => {
+          localOrderRef.current.set(v.id, idx)
+        })
+        return result
+      } else if (insertAfterVenueId === null) {
+        // Insert at the beginning of the target stage
+        // Find the first venue in the target stage
+        const firstIndexInStage = withoutVenue.findIndex(v => v.stage === newStage)
+        if (firstIndexInStage === -1) {
+          // No venues in target stage, just append
+          return [...withoutVenue, updatedVenue]
+        }
+        // Insert before the first venue in the stage
+        const result = [
+          ...withoutVenue.slice(0, firstIndexInStage),
+          updatedVenue,
+          ...withoutVenue.slice(firstIndexInStage)
+        ]
+        // Save order of venues in the target stage
+        const stageVenues = result.filter(v => v.stage === newStage)
+        stageVenues.forEach((v, idx) => {
+          localOrderRef.current.set(v.id, idx)
+        })
+        return result
+      } else {
+        // Insert after a specific venue
+        const insertIndex = withoutVenue.findIndex(v => v.id === insertAfterVenueId)
+        if (insertIndex === -1) {
+          // Target venue not found, append at end
+          return [...withoutVenue, updatedVenue]
+        }
+        const result = [
+          ...withoutVenue.slice(0, insertIndex + 1),
+          updatedVenue,
+          ...withoutVenue.slice(insertIndex + 1)
+        ]
+        // Save order of venues in the target stage to preserve when server data arrives
+        const stageVenues = result.filter(v => v.stage === newStage)
+        stageVenues.forEach((v, idx) => {
+          localOrderRef.current.set(v.id, idx)
+        })
+        return result
+      }
+    })
     // Persist to server
     updateStageMutation.mutate({ id: venueId, stage: newStage })
   }, [updateStageMutation])
 
+  // Reorder within the same stage (no stage change, just local reordering)
+  const reorderWithinStage = useCallback((
+    venueId: string,
+    stage: VenueStage,
+    insertAfterVenueId?: string | null // null = insert at beginning, undefined = append at end
+  ) => {
+    setVenues((prev) => {
+      const venueToMove = prev.find(v => v.id === venueId)
+      if (!venueToMove) return prev
+
+      // Remove the venue from its current position
+      const withoutVenue = prev.filter(v => v.id !== venueId)
+
+      let result: Venue[]
+
+      if (insertAfterVenueId === undefined) {
+        // Append at the end of the stage
+        let lastIndexInStage = -1
+        for (let i = withoutVenue.length - 1; i >= 0; i--) {
+          if (withoutVenue[i].stage === stage) {
+            lastIndexInStage = i
+            break
+          }
+        }
+        if (lastIndexInStage === -1) {
+          result = [...withoutVenue, venueToMove]
+        } else {
+          result = [
+            ...withoutVenue.slice(0, lastIndexInStage + 1),
+            venueToMove,
+            ...withoutVenue.slice(lastIndexInStage + 1)
+          ]
+        }
+      } else if (insertAfterVenueId === null) {
+        // Insert at the beginning of the stage
+        const firstIndexInStage = withoutVenue.findIndex(v => v.stage === stage)
+        if (firstIndexInStage === -1) {
+          result = [...withoutVenue, venueToMove]
+        } else {
+          result = [
+            ...withoutVenue.slice(0, firstIndexInStage),
+            venueToMove,
+            ...withoutVenue.slice(firstIndexInStage)
+          ]
+        }
+      } else {
+        // Insert after a specific venue
+        const insertIndex = withoutVenue.findIndex(v => v.id === insertAfterVenueId)
+        if (insertIndex === -1) {
+          result = [...withoutVenue, venueToMove]
+        } else {
+          result = [
+            ...withoutVenue.slice(0, insertIndex + 1),
+            venueToMove,
+            ...withoutVenue.slice(insertIndex + 1)
+          ]
+        }
+      }
+
+      // Save order of venues in the stage to preserve when server data arrives
+      const stageVenues = result.filter(v => v.stage === stage)
+      stageVenues.forEach((v, idx) => {
+        localOrderRef.current.set(v.id, idx)
+      })
+
+      return result
+    })
+    // No server mutation needed - ordering is local only
+  }, [])
+
   const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+
+    // Read placeholder position from ref (synchronous, avoids React state batching issues)
+    const savedPlaceholder = dropPlaceholderRef.current
+
+    // Clear all drag state
     setActiveVenue(null)
     setActiveDropTarget(null)
-    const { active, over } = event
+    setDropPlaceholder(null)
+    dropPlaceholderRef.current = null
+    setPlaceholderExpanded(false)
 
     if (!over) return
 
     const draggedVenue = venues.find((v) => v.id === active.id)
     if (!draggedVenue) return
 
-    // Determine target stage - could be dropping on a column or on another card
+    // Use the placeholder position that was shown during drag, not the over detection
+    // This ensures the card goes exactly where the placeholder was
     let targetStage: VenueStage | null = null
+    let insertAfterVenueId: string | null | undefined = undefined // undefined = end, null = beginning
 
-    // Check if dropped on a stage column directly
-    if (stages.some((s) => s.key === over.id)) {
-      targetStage = over.id as VenueStage
-    } else {
-      // Dropped on another card - find its stage
-      const targetVenue = venues.find((v) => v.id === over.id)
-      if (targetVenue) {
-        targetStage = targetVenue.stage
-      }
-    }
+    if (savedPlaceholder) {
+      // Use the pre-calculated placeholder position
+      targetStage = savedPlaceholder.stage
+      const stageVenues = venuesByStage.get(targetStage) || []
+      const placeholderIndex = savedPlaceholder.insertAfterIndex
 
-    if (targetStage && targetStage !== draggedVenue.stage) {
-      // Check if this is a "large" stage jump (more than 2 stages)
-      const fromIndex = stages.findIndex((s) => s.key === draggedVenue.stage)
-      const toIndex = stages.findIndex((s) => s.key === targetStage)
-      const stageJump = Math.abs(toIndex - fromIndex)
-
-      if (stageJump > 2) {
-        // Capture the card's original position BEFORE the optimistic update
-        const cardElement = document.querySelector(`[data-venue-id="${draggedVenue.id}"]`)
-        const originalCardRect = cardElement?.getBoundingClientRect() || null
-
-        // Calculate original index in the column
-        const originalVenues = venuesByStage.get(draggedVenue.stage) || []
-        const originalIndex = originalVenues.findIndex(v => v.id === draggedVenue.id)
-
-        // Apply change optimistically so card stays at destination
-        applyStageChange(draggedVenue.id, targetStage)
-        // Show confirmation dialog (can revert if cancelled)
-        setStageChangeDialog({
-          venue: draggedVenue,
-          fromStage: draggedVenue.stage,
-          toStage: targetStage,
-          originalCardRect,
-          originalIndex,
-        })
+      if (placeholderIndex === 0) {
+        // Placeholder was at the beginning
+        insertAfterVenueId = null
+      } else if (placeholderIndex >= stageVenues.length) {
+        // Placeholder was at the end
+        insertAfterVenueId = undefined
       } else {
-        // Apply change directly
-        applyStageChange(draggedVenue.id, targetStage)
+        // Placeholder was before card at placeholderIndex, so insert after card at placeholderIndex-1
+        insertAfterVenueId = stageVenues[placeholderIndex - 1].id
+      }
+    } else {
+      // Fallback: determine from over.id
+      if (stages.some((s) => s.key === over.id)) {
+        targetStage = over.id as VenueStage
+        insertAfterVenueId = undefined
+      } else {
+        const targetVenue = venues.find((v) => v.id === over.id)
+        if (targetVenue) {
+          targetStage = targetVenue.stage
+          const stageVenues = venuesByStage.get(targetStage) || []
+          const targetIndex = stageVenues.findIndex(v => v.id === targetVenue.id)
+          if (targetIndex === 0) {
+            insertAfterVenueId = null
+          } else {
+            insertAfterVenueId = stageVenues[targetIndex - 1].id
+          }
+        }
       }
     }
-  }, [venues, venuesByStage, applyStageChange])
+
+    if (targetStage) {
+      const isSameColumn = targetStage === draggedVenue.stage
+
+      if (isSameColumn) {
+        // Within-column reordering
+        const stageVenues = venuesByStage.get(targetStage) || []
+        const currentIndex = stageVenues.findIndex(v => v.id === draggedVenue.id)
+
+        // Determine the target position
+        let targetIndex: number
+        if (insertAfterVenueId === null) {
+          targetIndex = 0
+        } else if (insertAfterVenueId === undefined) {
+          targetIndex = stageVenues.length - 1
+        } else {
+          targetIndex = stageVenues.findIndex(v => v.id === insertAfterVenueId)
+          // If dropping after a card that's before our current position, add 1
+          if (targetIndex < currentIndex) {
+            targetIndex += 1
+          }
+        }
+
+        // Only reorder if position actually changed
+        // No-op case (insertAfterVenueId = dragged card) already gives targetIndex === currentIndex
+        if (targetIndex !== currentIndex) {
+          // FLIP animation: capture old positions before state update
+          const columnEl = document.querySelector(`[data-stage="${targetStage}"]`)
+          const oldPositions = new Map<string, number>()
+          if (columnEl) {
+            const cards = columnEl.querySelectorAll('[data-venue-id]')
+            cards.forEach(card => {
+              const venueId = card.getAttribute('data-venue-id')
+              if (venueId && venueId !== draggedVenue.id) {
+                oldPositions.set(venueId, card.getBoundingClientRect().top)
+              }
+            })
+          }
+
+          setJustDroppedVenueId(draggedVenue.id)
+          reorderWithinStage(draggedVenue.id, targetStage, insertAfterVenueId)
+
+          // FLIP animation: after React re-renders, animate other cards from old to new positions
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              const animatedCards: HTMLElement[] = []
+              if (columnEl) {
+                const cards = columnEl.querySelectorAll('[data-venue-id]') as NodeListOf<HTMLElement>
+                cards.forEach(card => {
+                  const venueId = card.getAttribute('data-venue-id')
+                  if (!venueId || venueId === draggedVenue.id) return
+
+                  const oldTop = oldPositions.get(venueId)
+                  if (oldTop !== undefined) {
+                    const newTop = card.getBoundingClientRect().top
+                    const delta = oldTop - newTop
+
+                    if (Math.abs(delta) > 1) {
+                      animatedCards.push(card)
+                      // Immediately position at old location (no transition)
+                      card.style.transform = `translateY(${delta}px)`
+                      card.style.transition = 'none'
+
+                      // Force reflow to ensure the transform is applied
+                      card.offsetHeight
+
+                      // Animate to new position
+                      card.style.transition = 'transform 200ms ease-out'
+                      card.style.transform = 'translateY(0)'
+                    }
+                  }
+                })
+              }
+
+              // Clean up inline styles and clear state after animation completes
+              setTimeout(() => {
+                animatedCards.forEach(card => {
+                  card.style.removeProperty('transform')
+                  card.style.removeProperty('transition')
+                })
+                setJustDroppedVenueId(null)
+              }, 250)
+            })
+          })
+        }
+      } else {
+        // Cross-column move
+        setJustDroppedVenueId(draggedVenue.id)
+        setTimeout(() => setJustDroppedVenueId(null), 50)
+
+        // Check if this is a "large" stage jump (more than 2 stages)
+        const fromIndex = stages.findIndex((s) => s.key === draggedVenue.stage)
+        const toIndex = stages.findIndex((s) => s.key === targetStage)
+        const stageJump = Math.abs(toIndex - fromIndex)
+
+        if (stageJump > 2) {
+          // Capture the card's original position BEFORE the optimistic update
+          const cardElement = document.querySelector(`[data-venue-id="${draggedVenue.id}"]`)
+          const originalCardRect = cardElement?.getBoundingClientRect() || null
+
+          // Calculate original index and insert position in the column
+          const originalVenues = venuesByStage.get(draggedVenue.stage) || []
+          const originalIndex = originalVenues.findIndex(v => v.id === draggedVenue.id)
+          // If it was first in the column, insert at beginning (null), otherwise insert after the previous card
+          const originalInsertAfterVenueId = originalIndex > 0 ? originalVenues[originalIndex - 1].id : null
+
+          // Apply change optimistically so card stays at destination
+          applyStageChange(draggedVenue.id, targetStage, insertAfterVenueId)
+          // Show confirmation dialog (can revert if cancelled)
+          setStageChangeDialog({
+            venue: draggedVenue,
+            fromStage: draggedVenue.stage,
+            toStage: targetStage,
+            originalCardRect,
+            originalIndex,
+            originalInsertAfterVenueId,
+          })
+        } else {
+          // Apply change directly
+          applyStageChange(draggedVenue.id, targetStage, insertAfterVenueId)
+        }
+      }
+    }
+  }, [venues, venuesByStage, applyStageChange, reorderWithinStage])
 
   const confirmStageChange = useCallback(() => {
     // Already applied optimistically, just close the dialog
@@ -1002,7 +1427,7 @@ export default function Pipeline() {
 
       // After animation, revert the stage and clear animation state
       setTimeout(() => {
-        applyStageChange(stageChangeDialog.venue.id, stageChangeDialog.fromStage)
+        applyStageChange(stageChangeDialog.venue.id, stageChangeDialog.fromStage, stageChangeDialog.originalInsertAfterVenueId)
         setReturningCard(null)
         setExpandingPlaceholder(null)
         setCollapsingPlaceholder(null)
@@ -1150,6 +1575,18 @@ export default function Pipeline() {
                         pendingVenueId={stageChangeDialog?.venue.id}
                         isOriginColumn={activeVenue?.stage === stage.key}
                         returningVenueId={returningCard?.venue.id}
+                        justDroppedVenueId={justDroppedVenueId || undefined}
+                        draggingVenueId={activeVenue?.stage === stage.key ? activeVenue.id : undefined}
+                        dropPlaceholderIndex={
+                          dropPlaceholder?.stage === stage.key
+                            ? dropPlaceholder.insertAfterIndex
+                            : undefined
+                        }
+                        dropPlaceholderExpanded={
+                          dropPlaceholder?.stage === stage.key
+                            ? placeholderExpanded
+                            : undefined
+                        }
                         columnRef={columnRefCallbacks.get(stage.key)}
                         expandingPlaceholder={
                           expandingPlaceholderByStage?.stage === stage.key
