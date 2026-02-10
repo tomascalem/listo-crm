@@ -13,3 +13,9 @@ variable "price_class" {
   type        = string
   default     = "PriceClass_100" # US, Canada, Europe
 }
+
+variable "api_domain_name" {
+  description = "ALB domain name for API proxy"
+  type        = string
+  default     = ""
+}

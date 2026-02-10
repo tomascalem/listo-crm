@@ -134,8 +134,9 @@ module "ecs" {
 module "frontend" {
   source = "../../modules/frontend"
 
-  project_name = var.project_name
-  environment  = var.environment
+  project_name    = var.project_name
+  environment     = var.environment
+  api_domain_name = module.alb.alb_dns_name
 }
 
 # =============================================================================

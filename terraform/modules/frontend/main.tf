@@ -128,6 +128,20 @@ resource "aws_cloudfront_cache_policy" "immutable" {
 }
 
 # =============================================================================
+# Data sources for managed CloudFront policies
+# =============================================================================
+
+# Use AWS managed CachingDisabled policy for API
+data "aws_cloudfront_cache_policy" "caching_disabled" {
+  name = "Managed-CachingDisabled"
+}
+
+# Use AWS managed AllViewerExceptHostHeader origin request policy
+data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
+  name = "Managed-AllViewerExceptHostHeader"
+}
+
+# =============================================================================
 # CloudFront Distribution
 # =============================================================================
 
@@ -148,6 +162,22 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
+  # API origin (ALB) - only if api_domain_name is provided
+  dynamic "origin" {
+    for_each = var.api_domain_name != "" ? [1] : []
+    content {
+      domain_name = var.api_domain_name
+      origin_id   = "ALB-api"
+
+      custom_origin_config {
+        http_port              = 80
+        https_port             = 443
+        origin_protocol_policy = "http-only"
+        origin_ssl_protocols   = ["TLSv1.2"]
+      }
+    }
+  }
+
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
@@ -160,6 +190,22 @@ resource "aws_cloudfront_distribution" "frontend" {
     function_association {
       event_type   = "viewer-request"
       function_arn = aws_cloudfront_function.spa_routing.arn
+    }
+  }
+
+  # API proxy - forward /api/* to ALB
+  dynamic "ordered_cache_behavior" {
+    for_each = var.api_domain_name != "" ? [1] : []
+    content {
+      path_pattern           = "/api/*"
+      allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+      cached_methods         = ["GET", "HEAD"]
+      target_origin_id       = "ALB-api"
+      viewer_protocol_policy = "redirect-to-https"
+      compress               = true
+
+      cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+      origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
     }
   }
 
