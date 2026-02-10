@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/providers/auth-provider"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,6 +50,12 @@ export function Sidebar() {
   const location = useLocation()
   const pathname = location.pathname
   const { setTheme } = useTheme()
+  const { logout, user } = useAuth()
+
+  const handleLogout = async () => {
+    await logout()
+    window.location.href = '/login'
+  }
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-border bg-sidebar">
@@ -96,11 +103,11 @@ export function Sidebar() {
                 className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-muted/50 focus:outline-none data-[state=open]:bg-muted/50"
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground shrink-0">
-                  SC
+                  {user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
                 </div>
                 <div className="flex flex-1 flex-col items-start min-w-0">
-                  <span className="text-sm font-medium text-sidebar-foreground truncate w-full">Sarah Chen</span>
-                  <span className="text-xs text-muted-foreground truncate w-full">sarah@getlisto.io</span>
+                  <span className="text-sm font-medium text-sidebar-foreground truncate w-full">{user?.name || 'User'}</span>
+                  <span className="text-xs text-muted-foreground truncate w-full">{user?.email || ''}</span>
                 </div>
                 <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
               </button>
@@ -161,7 +168,7 @@ export function Sidebar() {
                 Help & Support
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive">
+              <DropdownMenuItem variant="destructive" onSelect={handleLogout}>
                 <LogOut className="h-4 w-4" />
                 Sign out
               </DropdownMenuItem>

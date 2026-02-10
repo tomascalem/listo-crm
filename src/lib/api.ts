@@ -190,7 +190,13 @@ export const authApi = {
 
   async logout() {
     try {
-      await apiFetch('/auth/logout', { method: 'POST' });
+      const refreshToken = getRefreshToken();
+      if (refreshToken) {
+        await apiFetch('/auth/logout', {
+          method: 'POST',
+          body: JSON.stringify({ refreshToken }),
+        });
+      }
     } finally {
       clearTokens();
     }
