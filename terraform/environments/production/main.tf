@@ -123,7 +123,7 @@ module "ecs" {
   uploads_bucket_arn  = module.storage.bucket_arn
 
   frontend_url = module.frontend.frontend_url
-  api_url      = module.alb.api_url
+  api_url      = module.frontend.frontend_url  # API accessed via CloudFront proxy
   redis_url    = module.redis.redis_url
 }
 
