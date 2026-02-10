@@ -20,17 +20,17 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Enable corepack for pnpm
-RUN corepack enable
+# Copy package.json for reference
+COPY --from=builder /app/package.json ./
 
-# Install production dependencies only
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile --prod
+# Copy node_modules with generated Prisma client
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy prisma schema (needed for migrations)
+COPY --from=builder /app/prisma ./prisma
 
 # Copy built files
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/prisma ./prisma
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
