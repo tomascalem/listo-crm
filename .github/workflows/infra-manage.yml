@@ -164,10 +164,19 @@ jobs:
 
           echo "Preparation complete"
 
+      # Refresh credentials before long-running destroy (OIDC tokens expire after ~1 hour)
+      - name: Refresh AWS credentials for Terraform Destroy
+        if: github.event.inputs.action == 'down'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/listo-crm-production-github-actions
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 3600
+
       - name: Terraform Destroy
         if: github.event.inputs.action == 'down'
         working-directory: terraform/environments/production
-        run: terraform destroy -auto-approve
+        run: terraform destroy -auto-approve -parallelism=20
 
       - name: Down Summary
         if: github.event.inputs.action == 'down'
@@ -181,16 +190,25 @@ jobs:
           echo "- Snapshot ID: \`${{ steps.snapshot.outputs.snapshot_id }}\`" >> $GITHUB_STEP_SUMMARY
 
       # === UP ACTION ===
+      # Refresh credentials before long-running apply (OIDC tokens expire after ~1 hour)
+      - name: Refresh AWS credentials for Terraform Apply
+        if: github.event.inputs.action == 'up'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/listo-crm-production-github-actions
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 3600
+
       - name: Terraform Apply
         if: github.event.inputs.action == 'up'
         working-directory: terraform/environments/production
         run: |
           if [ -n "${{ github.event.inputs.snapshot_id }}" ]; then
             echo "Restoring from snapshot: ${{ github.event.inputs.snapshot_id }}"
-            terraform apply -auto-approve -var="db_snapshot_identifier=${{ github.event.inputs.snapshot_id }}"
+            terraform apply -auto-approve -parallelism=20 -var="db_snapshot_identifier=${{ github.event.inputs.snapshot_id }}"
           else
             echo "Creating fresh infrastructure"
-            terraform apply -auto-approve
+            terraform apply -auto-approve -parallelism=20
           fi
 
       - name: Get Outputs
