@@ -201,6 +201,48 @@ jobs:
           echo "frontend_url=$(terraform output -raw frontend_url 2>/dev/null || echo '')" >> $GITHUB_OUTPUT
           echo "ecr_url=$(terraform output -raw ecr_repository_url 2>/dev/null || echo '')" >> $GITHUB_OUTPUT
 
+      - name: Sync RDS Password (for snapshot restore)
+        if: github.event.inputs.action == 'up' && github.event.inputs.snapshot_id != ''
+        run: |
+          echo "Syncing RDS password after snapshot restore..."
+
+          # Generate new URL-safe password
+          NEW_PASSWORD=$(openssl rand -base64 24 | tr '+/' '-_' | tr -d '=')
+
+          # Get RDS endpoint
+          DB_HOST=$(aws rds describe-db-instances --db-instance-identifier listo-crm-production \
+            --query 'DBInstances[0].Endpoint.Address' --output text)
+
+          # Update RDS master password
+          aws rds modify-db-instance \
+            --db-instance-identifier listo-crm-production \
+            --master-user-password "$NEW_PASSWORD" \
+            --apply-immediately
+
+          # Wait for password reset
+          echo "Waiting for RDS password reset..."
+          sleep 30
+          aws rds wait db-instance-available --db-instance-identifier listo-crm-production
+
+          # Update Secrets Manager
+          SECRET_JSON=$(cat <<EOF
+          {
+            "DATABASE_URL": "postgresql://listo_admin:${NEW_PASSWORD}@${DB_HOST}:5432/listo_crm?schema=public",
+            "DB_HOST": "${DB_HOST}",
+            "DB_PORT": 5432,
+            "DB_NAME": "listo_crm",
+            "DB_USERNAME": "listo_admin",
+            "DB_PASSWORD": "${NEW_PASSWORD}"
+          }
+          EOF
+          )
+
+          aws secretsmanager put-secret-value \
+            --secret-id listo-crm/production/database \
+            --secret-string "$SECRET_JSON"
+
+          echo "RDS password synced successfully"
+
       - name: Up Summary
         if: github.event.inputs.action == 'up'
         run: |

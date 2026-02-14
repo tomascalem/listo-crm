@@ -5,7 +5,8 @@
 resource "random_password" "db_password" {
   length           = 32
   special          = true
-  override_special = "!#$%&*()-_=+[]{}<>:?"
+  # Only use URL-safe special characters to avoid connection string parsing issues
+  override_special = "-_"
 }
 
 # =============================================================================
@@ -149,7 +150,7 @@ resource "aws_secretsmanager_secret" "database_url" {
 resource "aws_secretsmanager_secret_version" "database_url" {
   secret_id = aws_secretsmanager_secret.database_url.id
   secret_string = jsonencode({
-    DATABASE_URL = "postgresql://${aws_db_instance.main.username}:${random_password.db_password.result}@${aws_db_instance.main.endpoint}/${aws_db_instance.main.db_name}?schema=public"
+    DATABASE_URL = "postgresql://${aws_db_instance.main.username}:${urlencode(random_password.db_password.result)}@${aws_db_instance.main.endpoint}/${aws_db_instance.main.db_name}?schema=public"
     DB_HOST      = aws_db_instance.main.address
     DB_PORT      = aws_db_instance.main.port
     DB_NAME      = aws_db_instance.main.db_name
