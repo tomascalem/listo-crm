@@ -80,18 +80,22 @@ resource "aws_iam_role_policy_attachment" "rds_monitoring" {
 resource "aws_db_instance" "main" {
   identifier = "${var.project_name}-${var.environment}"
 
+  # Restore from snapshot if provided
+  snapshot_identifier = var.snapshot_identifier != "" ? var.snapshot_identifier : null
+
   engine         = "postgres"
   engine_version = var.engine_version
   instance_class = var.instance_class
 
-  allocated_storage     = var.allocated_storage
+  allocated_storage     = var.snapshot_identifier != "" ? null : var.allocated_storage
   max_allocated_storage = var.max_allocated_storage
   storage_type          = "gp3"
   storage_encrypted     = true
 
-  db_name  = var.database_name
-  username = "listo_admin"
-  password = random_password.db_password.result
+  # These are ignored when restoring from snapshot
+  db_name  = var.snapshot_identifier != "" ? null : var.database_name
+  username = var.snapshot_identifier != "" ? null : "listo_admin"
+  password = var.snapshot_identifier != "" ? null : random_password.db_password.result
 
   vpc_security_group_ids = [var.security_group_id]
   db_subnet_group_name   = aws_db_subnet_group.main.name
@@ -102,7 +106,7 @@ resource "aws_db_instance" "main" {
 
   deletion_protection       = var.deletion_protection
   skip_final_snapshot       = false
-  final_snapshot_identifier = "${var.project_name}-${var.environment}-final-snapshot"
+  final_snapshot_identifier = "${var.project_name}-${var.environment}-final-${formatdate("YYYYMMDD-hhmmss", timestamp())}"
   copy_tags_to_snapshot     = true
 
   backup_retention_period = var.backup_retention_period
@@ -118,6 +122,13 @@ resource "aws_db_instance" "main" {
 
   tags = {
     Name = "${var.project_name}-${var.environment}-postgres"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      snapshot_identifier,
+      final_snapshot_identifier,
+    ]
   }
 }
 

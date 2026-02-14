@@ -70,3 +70,9 @@ variable "deletion_protection" {
   type        = bool
   default     = true
 }
+
+variable "snapshot_identifier" {
+  description = "Snapshot identifier to restore from (leave empty for fresh database)"
+  type        = string
+  default     = ""
+}

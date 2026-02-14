@@ -58,6 +58,12 @@ variable "db_multi_az" {
   default     = false
 }
 
+variable "db_snapshot_identifier" {
+  description = "RDS snapshot identifier to restore from (leave empty for fresh database)"
+  type        = string
+  default     = ""
+}
+
 # =============================================================================
 # Redis
 # =============================================================================

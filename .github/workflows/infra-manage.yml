@@ -1,0 +1,166 @@
+name: Manage Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - status
+          - down
+          - up
+      snapshot_id:
+        description: 'Snapshot ID for restore (only for "up" action, leave empty for fresh DB)'
+        required: false
+        type: string
+        default: ''
+
+env:
+  AWS_REGION: us-east-1
+  TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+  TF_VAR_google_client_id: ${{ secrets.GOOGLE_CLIENT_ID }}
+  TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+  TF_VAR_token_encryption_key: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
+  TF_VAR_github_org: ${{ github.repository_owner }}
+  TF_VAR_github_repo: ${{ github.event.repository.name }}
+
+jobs:
+  manage:
+    name: ${{ github.event.inputs.action }} Infrastructure
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/listo-crm-production-github-actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init
+        working-directory: terraform/environments/production
+        run: terraform init
+
+      # === STATUS ACTION ===
+      - name: Check Infrastructure Status
+        if: github.event.inputs.action == 'status'
+        run: |
+          echo "## Infrastructure Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # ECS Status
+          echo "### ECS Service" >> $GITHUB_STEP_SUMMARY
+          ECS_STATUS=$(aws ecs describe-services --cluster listo-crm-production --services listo-crm-production-api \
+            --query 'services[0].{desired:desiredCount,running:runningCount,status:status}' --output json 2>/dev/null || echo '{"error": "Not found"}')
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$ECS_STATUS" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          # RDS Status
+          echo "### RDS Database" >> $GITHUB_STEP_SUMMARY
+          RDS_STATUS=$(aws rds describe-db-instances \
+            --query "DBInstances[?contains(DBInstanceIdentifier, 'listo-crm-production')].{id:DBInstanceIdentifier,status:DBInstanceStatus,class:DBInstanceClass}" \
+            --output json 2>/dev/null || echo '[]')
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RDS_STATUS" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          # Available Snapshots
+          echo "### Available Snapshots" >> $GITHUB_STEP_SUMMARY
+          SNAPSHOTS=$(aws rds describe-db-snapshots \
+            --query "DBSnapshots[?contains(DBSnapshotIdentifier, 'listo-crm')].{ID:DBSnapshotIdentifier,Created:SnapshotCreateTime,Status:Status}" \
+            --output json 2>/dev/null || echo '[]')
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$SNAPSHOTS" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      # === DOWN ACTION ===
+      - name: Create RDS Snapshot
+        if: github.event.inputs.action == 'down'
+        id: snapshot
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          SNAPSHOT_ID="listo-crm-production-${TIMESTAMP}"
+
+          echo "Creating snapshot: $SNAPSHOT_ID"
+
+          RDS_INSTANCE=$(aws rds describe-db-instances \
+            --query "DBInstances[?contains(DBInstanceIdentifier, 'listo-crm-production')].DBInstanceIdentifier" \
+            --output text 2>/dev/null || echo "")
+
+          if [ -n "$RDS_INSTANCE" ]; then
+            aws rds create-db-snapshot \
+              --db-instance-identifier "$RDS_INSTANCE" \
+              --db-snapshot-identifier "$SNAPSHOT_ID"
+
+            echo "Waiting for snapshot..."
+            aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAPSHOT_ID"
+            echo "Snapshot created: $SNAPSHOT_ID"
+          else
+            echo "No RDS instance found (may already be destroyed)"
+            SNAPSHOT_ID="none"
+          fi
+
+          echo "snapshot_id=$SNAPSHOT_ID" >> $GITHUB_OUTPUT
+
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'down'
+        working-directory: terraform/environments/production
+        run: terraform destroy -auto-approve
+
+      - name: Down Summary
+        if: github.event.inputs.action == 'down'
+        run: |
+          echo "## Infrastructure Down Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Snapshot ID:** \`${{ steps.snapshot.outputs.snapshot_id }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To bring infrastructure back up, run this workflow with:" >> $GITHUB_STEP_SUMMARY
+          echo "- Action: \`up\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Snapshot ID: \`${{ steps.snapshot.outputs.snapshot_id }}\`" >> $GITHUB_STEP_SUMMARY
+
+      # === UP ACTION ===
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'up'
+        working-directory: terraform/environments/production
+        run: |
+          if [ -n "${{ github.event.inputs.snapshot_id }}" ]; then
+            echo "Restoring from snapshot: ${{ github.event.inputs.snapshot_id }}"
+            terraform apply -auto-approve -var="db_snapshot_identifier=${{ github.event.inputs.snapshot_id }}"
+          else
+            echo "Creating fresh infrastructure"
+            terraform apply -auto-approve
+          fi
+
+      - name: Get Outputs
+        if: github.event.inputs.action == 'up'
+        id: outputs
+        working-directory: terraform/environments/production
+        run: |
+          echo "frontend_url=$(terraform output -raw frontend_url 2>/dev/null || echo '')" >> $GITHUB_OUTPUT
+          echo "ecr_url=$(terraform output -raw ecr_repository_url 2>/dev/null || echo '')" >> $GITHUB_OUTPUT
+
+      - name: Up Summary
+        if: github.event.inputs.action == 'up'
+        run: |
+          echo "## Infrastructure Up Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Frontend URL:** ${{ steps.outputs.outputs.frontend_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**ECR Repository:** ${{ steps.outputs.outputs.ecr_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Build and push Docker image to ECR" >> $GITHUB_STEP_SUMMARY
+          echo "2. Deploy frontend (triggered automatically if you push)" >> $GITHUB_STEP_SUMMARY
+          echo "3. Update Google OAuth redirect URI if CloudFront URL changed" >> $GITHUB_STEP_SUMMARY

@@ -43,14 +43,16 @@ module "secrets" {
 module "database" {
   source = "../../modules/database"
 
-  project_name      = var.project_name
-  environment       = var.environment
-  vpc_id            = module.networking.vpc_id
-  subnet_ids        = module.networking.private_data_subnet_ids
-  security_group_id = module.networking.rds_security_group_id
-  instance_class    = var.db_instance_class
-  allocated_storage = var.db_allocated_storage
-  multi_az          = var.db_multi_az
+  project_name        = var.project_name
+  environment         = var.environment
+  vpc_id              = module.networking.vpc_id
+  subnet_ids          = module.networking.private_data_subnet_ids
+  security_group_id   = module.networking.rds_security_group_id
+  instance_class      = var.db_instance_class
+  allocated_storage   = var.db_allocated_storage
+  multi_az            = var.db_multi_az
+  snapshot_identifier = var.db_snapshot_identifier
+  deletion_protection = false  # Allow terraform destroy (snapshot taken first)
 }
 
 # =============================================================================
