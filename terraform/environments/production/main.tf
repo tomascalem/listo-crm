@@ -268,6 +268,59 @@ resource "aws_iam_role_policy" "github_actions" {
           "cloudfront:CreateInvalidation"
         ]
         Resource = module.frontend.cloudfront_distribution_arn
+      },
+      # Terraform state management
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::listo-crm-terraform-state",
+          "arn:aws:s3:::listo-crm-terraform-state/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem"
+        ]
+        Resource = "arn:aws:dynamodb:${var.aws_region}:*:table/listo-crm-terraform-locks"
+      },
+      # RDS snapshot management
+      {
+        Effect = "Allow"
+        Action = [
+          "rds:CreateDBSnapshot",
+          "rds:DeleteDBSnapshot",
+          "rds:DescribeDBSnapshots",
+          "rds:DescribeDBInstances",
+          "rds:RestoreDBInstanceFromDBSnapshot"
+        ]
+        Resource = "*"
+      },
+      # Full infrastructure management (for terraform destroy/apply)
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:*",
+          "elasticache:*",
+          "rds:*",
+          "secretsmanager:*",
+          "logs:*",
+          "cloudwatch:*",
+          "sns:*",
+          "iam:*",
+          "s3:*",
+          "cloudfront:*",
+          "elasticloadbalancing:*"
+        ]
+        Resource = "*"
       }
     ]
   })
