@@ -43,6 +43,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/listo-crm-production-github-actions
           aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 7200  # 2 hours for long-running terraform operations
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -114,6 +115,54 @@ jobs:
           fi
 
           echo "snapshot_id=$SNAPSHOT_ID" >> $GITHUB_OUTPUT
+
+      - name: Prepare for Destroy
+        if: github.event.inputs.action == 'down'
+        run: |
+          echo "Preparing resources for destroy..."
+
+          # Disable RDS deletion protection
+          RDS_INSTANCE=$(aws rds describe-db-instances \
+            --query "DBInstances[?contains(DBInstanceIdentifier, 'listo-crm-production')].DBInstanceIdentifier" \
+            --output text 2>/dev/null || echo "")
+          if [ -n "$RDS_INSTANCE" ]; then
+            echo "Disabling deletion protection on RDS..."
+            aws rds modify-db-instance --db-instance-identifier "$RDS_INSTANCE" --no-deletion-protection || true
+            sleep 10
+          fi
+
+          # Empty S3 buckets (including versioned objects)
+          for BUCKET in listo-crm-frontend-production listo-crm-uploads-production; do
+            if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+              echo "Emptying bucket: $BUCKET"
+              aws s3 rm "s3://$BUCKET" --recursive || true
+              # Delete all versions
+              aws s3api list-object-versions --bucket "$BUCKET" --query 'Versions[].{Key:Key,VersionId:VersionId}' --output json 2>/dev/null | \
+                jq -c '.[]' 2>/dev/null | while read obj; do
+                  key=$(echo "$obj" | jq -r '.Key')
+                  vid=$(echo "$obj" | jq -r '.VersionId')
+                  aws s3api delete-object --bucket "$BUCKET" --key "$key" --version-id "$vid" || true
+                done
+              # Delete delete markers
+              aws s3api list-object-versions --bucket "$BUCKET" --query 'DeleteMarkers[].{Key:Key,VersionId:VersionId}' --output json 2>/dev/null | \
+                jq -c '.[]' 2>/dev/null | while read obj; do
+                  key=$(echo "$obj" | jq -r '.Key')
+                  vid=$(echo "$obj" | jq -r '.VersionId')
+                  aws s3api delete-object --bucket "$BUCKET" --key "$key" --version-id "$vid" || true
+                done
+            fi
+          done
+
+          # Delete ECR images
+          if aws ecr describe-repositories --repository-names listo-crm-api 2>/dev/null; then
+            echo "Deleting ECR images..."
+            IMAGES=$(aws ecr list-images --repository-name listo-crm-api --query 'imageIds[*]' --output json 2>/dev/null || echo '[]')
+            if [ "$IMAGES" != "[]" ]; then
+              aws ecr batch-delete-image --repository-name listo-crm-api --image-ids "$IMAGES" || true
+            fi
+          fi
+
+          echo "Preparation complete"
 
       - name: Terraform Destroy
         if: github.event.inputs.action == 'down'

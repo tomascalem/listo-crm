@@ -180,7 +180,8 @@ resource "aws_iam_openid_connect_provider" "github" {
 
 # IAM Role for GitHub Actions
 resource "aws_iam_role" "github_actions" {
-  name = "${local.name_prefix}-github-actions"
+  name                 = "${local.name_prefix}-github-actions"
+  max_session_duration = 7200  # 2 hours for long-running terraform operations
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
