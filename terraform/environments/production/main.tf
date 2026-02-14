@@ -309,6 +309,8 @@ resource "aws_iam_role_policy" "github_actions" {
         Effect = "Allow"
         Action = [
           "ec2:*",
+          "ecs:*",
+          "ecr:*",
           "elasticache:*",
           "rds:*",
           "secretsmanager:*",
@@ -318,7 +320,8 @@ resource "aws_iam_role_policy" "github_actions" {
           "iam:*",
           "s3:*",
           "cloudfront:*",
-          "elasticloadbalancing:*"
+          "elasticloadbalancing:*",
+          "application-autoscaling:*"
         ]
         Resource = "*"
       }
