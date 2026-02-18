@@ -42,6 +42,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      actions: write
 
     steps:
       - name: Checkout
@@ -329,6 +330,22 @@ jobs:
 
           echo "RDS password synced successfully"
 
+      - name: Trigger API Deploy
+        if: github.event.inputs.action == 'up'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Triggering API deploy..."
+          gh workflow run deploy-api.yml --repo ${{ github.repository }}
+
+      - name: Trigger Frontend Deploy
+        if: github.event.inputs.action == 'up'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Triggering Frontend deploy..."
+          gh workflow run deploy-frontend.yml --repo ${{ github.repository }}
+
       - name: Up Summary
         if: github.event.inputs.action == 'up'
         run: |
@@ -337,7 +354,7 @@ jobs:
           echo "**Frontend URL:** ${{ steps.outputs.outputs.frontend_url }}" >> $GITHUB_STEP_SUMMARY
           echo "**ECR Repository:** ${{ steps.outputs.outputs.ecr_url }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Build and push Docker image to ECR" >> $GITHUB_STEP_SUMMARY
-          echo "2. Deploy frontend (triggered automatically if you push)" >> $GITHUB_STEP_SUMMARY
-          echo "3. Update Google OAuth redirect URI if CloudFront URL changed" >> $GITHUB_STEP_SUMMARY
+          echo "API and Frontend deploys triggered automatically." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Remaining Manual Step:" >> $GITHUB_STEP_SUMMARY
+          echo "- Update Google OAuth redirect URI if CloudFront URL changed" >> $GITHUB_STEP_SUMMARY
