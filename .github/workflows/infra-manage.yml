@@ -205,11 +205,10 @@ jobs:
         run: |
           echo "Force-deleting any lingering Secrets Manager secrets..."
           for SECRET in listo-crm/production/database listo-crm/production/jwt listo-crm/production/google listo-crm/production/encryption; do
-            if aws secretsmanager describe-secret --secret-id "$SECRET" 2>/dev/null | jq -e '.DeletedDate' >/dev/null 2>&1; then
-              echo "Force-deleting: $SECRET"
-              aws secretsmanager delete-secret --secret-id "$SECRET" --force-delete-without-recovery || true
-            fi
+            aws secretsmanager restore-secret --secret-id "$SECRET" 2>/dev/null || true
+            aws secretsmanager delete-secret --secret-id "$SECRET" --force-delete-without-recovery 2>/dev/null && echo "Force-deleted: $SECRET" || true
           done
+          sleep 5
           echo "Secret cleanup complete"
 
       # Re-import the preserved resources back into state
@@ -284,15 +283,16 @@ jobs:
       - name: Clean up lingering secrets
         if: github.event.inputs.action == 'up'
         run: |
-          echo "Checking for secrets scheduled for deletion..."
+          echo "Cleaning up any lingering Secrets Manager secrets..."
           for SECRET in listo-crm/production/database listo-crm/production/jwt listo-crm/production/google listo-crm/production/encryption; do
-            if aws secretsmanager describe-secret --secret-id "$SECRET" 2>/dev/null | jq -e '.DeletedDate' >/dev/null 2>&1; then
-              echo "Force-deleting lingering secret: $SECRET"
-              aws secretsmanager delete-secret --secret-id "$SECRET" --force-delete-without-recovery || true
-            fi
+            echo "Processing: $SECRET"
+            # Restore first (needed if scheduled for deletion with recovery window)
+            aws secretsmanager restore-secret --secret-id "$SECRET" 2>/dev/null && echo "  Restored from scheduled deletion" || true
+            # Then force-delete immediately (no recovery window)
+            aws secretsmanager delete-secret --secret-id "$SECRET" --force-delete-without-recovery 2>/dev/null && echo "  Force-deleted" || true
           done
-          # Brief pause to let deletions propagate
-          sleep 5
+          echo "Waiting for deletions to propagate..."
+          sleep 10
           echo "Secret cleanup complete"
 
       - name: Terraform Apply
