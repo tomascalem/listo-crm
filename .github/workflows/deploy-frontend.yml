@@ -16,7 +16,6 @@ on:
 env:
   AWS_REGION: us-east-1
   S3_BUCKET: listo-crm-frontend-production
-  CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
 
 jobs:
   deploy:
@@ -29,6 +28,32 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/listo-crm-production-github-actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Discover CloudFront distribution
+        id: cloudfront
+        run: |
+          # Find the CloudFront distribution that uses our S3 bucket as origin
+          DIST_INFO=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Origins.Items[?contains(DomainName, '${{ env.S3_BUCKET }}')]].{Id:Id,Domain:DomainName}" \
+            --output json)
+
+          DIST_ID=$(echo "$DIST_INFO" | jq -r '.[0].Id')
+          DIST_DOMAIN=$(echo "$DIST_INFO" | jq -r '.[0].Domain')
+
+          if [ -z "$DIST_ID" ] || [ "$DIST_ID" = "null" ]; then
+            echo "::error::Could not find CloudFront distribution for bucket ${{ env.S3_BUCKET }}"
+            exit 1
+          fi
+
+          echo "distribution_id=$DIST_ID" >> $GITHUB_OUTPUT
+          echo "domain=$DIST_DOMAIN" >> $GITHUB_OUTPUT
+          echo "Found CloudFront: $DIST_DOMAIN (ID: $DIST_ID)"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -58,14 +83,8 @@ jobs:
 
       - name: Build
         env:
-          VITE_API_URL: ${{ secrets.API_URL }}/api/v1
+          VITE_API_URL: https://${{ steps.cloudfront.outputs.domain }}/api/v1
         run: pnpm build
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/listo-crm-production-github-actions
-          aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
         run: |
@@ -82,12 +101,13 @@ jobs:
       - name: Invalidate CloudFront cache
         run: |
           aws cloudfront create-invalidation \
-            --distribution-id ${{ env.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --distribution-id ${{ steps.cloudfront.outputs.distribution_id }} \
             --paths "/*"
 
       - name: Deployment summary
         run: |
-          echo "## Frontend Deployed! :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "## Frontend Deployed!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** https://${{ steps.cloudfront.outputs.domain }}" >> $GITHUB_STEP_SUMMARY
           echo "- **S3 Bucket:** ${{ env.S3_BUCKET }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **CloudFront:** ${{ env.CLOUDFRONT_DISTRIBUTION_ID }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **CloudFront:** ${{ steps.cloudfront.outputs.distribution_id }}" >> $GITHUB_STEP_SUMMARY
