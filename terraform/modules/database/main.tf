@@ -140,7 +140,7 @@ resource "aws_db_instance" "main" {
 resource "aws_secretsmanager_secret" "database_url" {
   name                    = "${var.project_name}/${var.environment}/database"
   description             = "Database connection URL for Listo CRM"
-  recovery_window_in_days = 7
+  recovery_window_in_days = 0
 
   tags = {
     Name = "${var.project_name}-${var.environment}-database-secret"

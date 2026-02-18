@@ -5,7 +5,7 @@
 resource "aws_secretsmanager_secret" "jwt" {
   name                    = "${var.project_name}/${var.environment}/jwt"
   description             = "JWT configuration for Listo CRM"
-  recovery_window_in_days = 7
+  recovery_window_in_days = 0
 
   tags = {
     Name = "${var.project_name}-${var.environment}-jwt-secret"
@@ -28,7 +28,7 @@ resource "aws_secretsmanager_secret_version" "jwt" {
 resource "aws_secretsmanager_secret" "google" {
   name                    = "${var.project_name}/${var.environment}/google"
   description             = "Google OAuth configuration for Listo CRM"
-  recovery_window_in_days = 7
+  recovery_window_in_days = 0
 
   tags = {
     Name = "${var.project_name}-${var.environment}-google-secret"
@@ -50,7 +50,7 @@ resource "aws_secretsmanager_secret_version" "google" {
 resource "aws_secretsmanager_secret" "encryption" {
   name                    = "${var.project_name}/${var.environment}/encryption"
   description             = "Token encryption key for Listo CRM"
-  recovery_window_in_days = 7
+  recovery_window_in_days = 0
 
   tags = {
     Name = "${var.project_name}-${var.environment}-encryption-secret"
