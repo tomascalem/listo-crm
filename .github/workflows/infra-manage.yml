@@ -11,8 +11,17 @@ on:
           - status
           - down
           - up
-      snapshot_id:
-        description: 'Snapshot ID for restore (only for "up" action, leave empty for fresh DB)'
+      db_restore:
+        description: 'Database restore option (only for "up" action)'
+        required: false
+        type: choice
+        options:
+          - latest-snapshot
+          - fresh
+          - custom
+        default: 'latest-snapshot'
+      custom_snapshot_id:
+        description: 'Custom snapshot ID (only if db_restore is "custom")'
         required: false
         type: string
         default: ''
@@ -190,6 +199,38 @@ jobs:
           echo "- Snapshot ID: \`${{ steps.snapshot.outputs.snapshot_id }}\`" >> $GITHUB_STEP_SUMMARY
 
       # === UP ACTION ===
+      - name: Resolve Snapshot ID
+        if: github.event.inputs.action == 'up'
+        id: resolve_snapshot
+        run: |
+          DB_RESTORE="${{ github.event.inputs.db_restore }}"
+
+          if [ "$DB_RESTORE" = "latest-snapshot" ]; then
+            echo "Finding latest available snapshot..."
+            SNAPSHOT_ID=$(aws rds describe-db-snapshots \
+              --query "sort_by(DBSnapshots[?contains(DBSnapshotIdentifier, 'listo-crm') && Status=='available'], &SnapshotCreateTime)[-1].DBSnapshotIdentifier" \
+              --output text 2>/dev/null || echo "")
+
+            if [ -z "$SNAPSHOT_ID" ] || [ "$SNAPSHOT_ID" = "None" ]; then
+              echo "::warning::No snapshots found. Will create fresh database."
+              SNAPSHOT_ID=""
+            else
+              echo "Using latest snapshot: $SNAPSHOT_ID"
+            fi
+          elif [ "$DB_RESTORE" = "custom" ]; then
+            SNAPSHOT_ID="${{ github.event.inputs.custom_snapshot_id }}"
+            if [ -z "$SNAPSHOT_ID" ]; then
+              echo "::error::Custom snapshot selected but no snapshot ID provided"
+              exit 1
+            fi
+            echo "Using custom snapshot: $SNAPSHOT_ID"
+          else
+            echo "Fresh database requested — no snapshot restore"
+            SNAPSHOT_ID=""
+          fi
+
+          echo "snapshot_id=$SNAPSHOT_ID" >> $GITHUB_OUTPUT
+
       # Refresh credentials before long-running apply (OIDC tokens expire after ~1 hour)
       - name: Refresh AWS credentials for Terraform Apply
         if: github.event.inputs.action == 'up'
@@ -203,9 +244,10 @@ jobs:
         if: github.event.inputs.action == 'up'
         working-directory: terraform/environments/production
         run: |
-          if [ -n "${{ github.event.inputs.snapshot_id }}" ]; then
-            echo "Restoring from snapshot: ${{ github.event.inputs.snapshot_id }}"
-            terraform apply -auto-approve -parallelism=20 -var="db_snapshot_identifier=${{ github.event.inputs.snapshot_id }}"
+          SNAPSHOT_ID="${{ steps.resolve_snapshot.outputs.snapshot_id }}"
+          if [ -n "$SNAPSHOT_ID" ]; then
+            echo "Restoring from snapshot: $SNAPSHOT_ID"
+            terraform apply -auto-approve -parallelism=20 -var="db_snapshot_identifier=$SNAPSHOT_ID"
           else
             echo "Creating fresh infrastructure"
             terraform apply -auto-approve -parallelism=20
@@ -220,7 +262,7 @@ jobs:
           echo "ecr_url=$(terraform output -raw ecr_repository_url 2>/dev/null || echo '')" >> $GITHUB_OUTPUT
 
       - name: Sync RDS Password (for snapshot restore)
-        if: github.event.inputs.action == 'up' && github.event.inputs.snapshot_id != ''
+        if: github.event.inputs.action == 'up' && steps.resolve_snapshot.outputs.snapshot_id != ''
         run: |
           echo "Syncing RDS password after snapshot restore..."
 
