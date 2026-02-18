@@ -182,10 +182,35 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-duration-seconds: 3600
 
+      # Preserve OIDC provider and IAM role so GitHub Actions can still authenticate after destroy
+      - name: Protect OIDC & IAM from Destroy
+        if: github.event.inputs.action == 'down'
+        working-directory: terraform/environments/production
+        run: |
+          echo "Removing OIDC provider and IAM role from Terraform state (to preserve them)..."
+          terraform state rm aws_iam_openid_connect_provider.github || true
+          terraform state rm aws_iam_role_policy.github_actions || true
+          terraform state rm aws_iam_role.github_actions || true
+          echo "These resources will survive destroy and be re-imported after."
+
       - name: Terraform Destroy
         if: github.event.inputs.action == 'down'
         working-directory: terraform/environments/production
         run: terraform destroy -auto-approve -parallelism=20
+
+      # Re-import the preserved resources back into state
+      - name: Re-import OIDC & IAM into State
+        if: github.event.inputs.action == 'down'
+        working-directory: terraform/environments/production
+        run: |
+          echo "Re-importing preserved OIDC provider and IAM role into Terraform state..."
+          terraform import aws_iam_openid_connect_provider.github \
+            "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:oidc-provider/token.actions.githubusercontent.com"
+          terraform import aws_iam_role.github_actions \
+            "listo-crm-production-github-actions"
+          terraform import aws_iam_role_policy.github_actions \
+            "listo-crm-production-github-actions:github-actions-permissions"
+          echo "Re-import complete. GitHub Actions can still authenticate."
 
       - name: Down Summary
         if: github.event.inputs.action == 'down'
@@ -194,9 +219,10 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Snapshot ID:** \`${{ steps.snapshot.outputs.snapshot_id }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "OIDC provider and IAM role preserved for next \`up\` run." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "To bring infrastructure back up, run this workflow with:" >> $GITHUB_STEP_SUMMARY
           echo "- Action: \`up\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Snapshot ID: \`${{ steps.snapshot.outputs.snapshot_id }}\`" >> $GITHUB_STEP_SUMMARY
 
       # === UP ACTION ===
       - name: Resolve Snapshot ID
