@@ -199,6 +199,19 @@ jobs:
         working-directory: terraform/environments/production
         run: terraform destroy -auto-approve -parallelism=20
 
+      # Force-delete any secrets lingering in "scheduled for deletion" state
+      - name: Force-delete lingering secrets
+        if: github.event.inputs.action == 'down'
+        run: |
+          echo "Force-deleting any lingering Secrets Manager secrets..."
+          for SECRET in listo-crm/production/database listo-crm/production/jwt listo-crm/production/google listo-crm/production/encryption; do
+            if aws secretsmanager describe-secret --secret-id "$SECRET" 2>/dev/null | jq -e '.DeletedDate' >/dev/null 2>&1; then
+              echo "Force-deleting: $SECRET"
+              aws secretsmanager delete-secret --secret-id "$SECRET" --force-delete-without-recovery || true
+            fi
+          done
+          echo "Secret cleanup complete"
+
       # Re-import the preserved resources back into state
       - name: Re-import OIDC & IAM into State
         if: github.event.inputs.action == 'down'
@@ -266,6 +279,21 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/listo-crm-production-github-actions
           aws-region: ${{ env.AWS_REGION }}
           role-duration-seconds: 3600
+
+      # Clean up any secrets stuck in "scheduled for deletion" from a previous down
+      - name: Clean up lingering secrets
+        if: github.event.inputs.action == 'up'
+        run: |
+          echo "Checking for secrets scheduled for deletion..."
+          for SECRET in listo-crm/production/database listo-crm/production/jwt listo-crm/production/google listo-crm/production/encryption; do
+            if aws secretsmanager describe-secret --secret-id "$SECRET" 2>/dev/null | jq -e '.DeletedDate' >/dev/null 2>&1; then
+              echo "Force-deleting lingering secret: $SECRET"
+              aws secretsmanager delete-secret --secret-id "$SECRET" --force-delete-without-recovery || true
+            fi
+          done
+          # Brief pause to let deletions propagate
+          sleep 5
+          echo "Secret cleanup complete"
 
       - name: Terraform Apply
         if: github.event.inputs.action == 'up'
