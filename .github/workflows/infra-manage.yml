@@ -285,15 +285,29 @@ jobs:
         run: |
           echo "Cleaning up any lingering Secrets Manager secrets..."
           for SECRET in listo-crm/production/database listo-crm/production/jwt listo-crm/production/google listo-crm/production/encryption; do
-            echo "Processing: $SECRET"
-            # Restore first (needed if scheduled for deletion with recovery window)
-            aws secretsmanager restore-secret --secret-id "$SECRET" 2>/dev/null && echo "  Restored from scheduled deletion" || true
-            # Then force-delete immediately (no recovery window)
-            aws secretsmanager delete-secret --secret-id "$SECRET" --force-delete-without-recovery 2>/dev/null && echo "  Force-deleted" || true
+            echo "--- Processing: $SECRET ---"
+            # Check current state
+            STATUS=$(aws secretsmanager describe-secret --secret-id "$SECRET" 2>&1) && {
+              echo "  Secret exists. Checking if scheduled for deletion..."
+              if echo "$STATUS" | grep -q "DeletedDate"; then
+                echo "  Restoring from scheduled deletion..."
+                aws secretsmanager restore-secret --secret-id "$SECRET"
+              fi
+              echo "  Force-deleting..."
+              aws secretsmanager delete-secret --secret-id "$SECRET" --force-delete-without-recovery
+              echo "  Done."
+            } || echo "  Secret does not exist (OK)."
           done
           echo "Waiting for deletions to propagate..."
-          sleep 10
-          echo "Secret cleanup complete"
+          sleep 15
+          # Verify all secrets are gone
+          for SECRET in listo-crm/production/database listo-crm/production/jwt listo-crm/production/google listo-crm/production/encryption; do
+            if aws secretsmanager describe-secret --secret-id "$SECRET" 2>/dev/null; then
+              echo "::error::Secret $SECRET still exists after cleanup!"
+              exit 1
+            fi
+          done
+          echo "All secrets confirmed deleted."
 
       - name: Terraform Apply
         if: github.event.inputs.action == 'up'
